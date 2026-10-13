@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Рубеж: экраны</title>
+<style>
+:root {
+  --bg: #070b11; --panel: #0c1724; --panel2: #102033; --line: #2a4560;
+  --c: #38e1ff; --c2: #9ff3ff; --p: #b36bff; --warn: #ff4a3a; --ok: #5dffa0; --gold: #ffc94a;
+  --txt: #e6f4ff; --mute: #8aa3b8;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #04070b; color: var(--txt); }
+header { position: sticky; top: 0; z-index: 5; background: #04070bee; border-bottom: 1px solid #1a2a3a; padding: 10px 16px; }
+header h1 { margin: 0 0 8px; font-size: 18px; letter-spacing: .06em; }
+header h1 small { color: var(--mute); font-weight: 400; letter-spacing: 0; margin-left: 8px; font-size: 13px; }
+nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+nav button { flex: none; background: #0e1a28; color: var(--mute); border: 1px solid #1f3346; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+nav button.on { color: #012; background: var(--c); border-color: var(--c); }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.flow { color: var(--mute); font-size: 13px; margin: 0 0 12px; }
+.note { color: var(--mute); font-size: 14px; line-height: 1.5; margin: 12px 2px 0; }
+.note b { color: var(--txt); }
+
+/* устройство: альбомный телефон 20:9, всё внутри масштабируется по ширине (cqw) */
+.phone { width: 100%; aspect-ratio: 20 / 9; border-radius: 3.2cqw; padding: 0; background: #000; border: 6px solid #1b232d; box-shadow: 0 10px 40px #000a, inset 0 0 0 1px #33404e; container-type: inline-size; overflow: hidden; position: relative; }
+.scr { position: absolute; inset: 0; display: none; font-size: 1.45cqw; overflow: hidden; }
+.scr.on { display: block; }
+.abs { position: absolute; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .5em; border-radius: .9em; padding: .7em 1.4em; font-weight: 700; background: var(--c); color: #012; cursor: pointer; border: 0; font: inherit; font-weight: 700; }
+.btn.big { font-size: 1.5em; padding: .65em 1.6em; box-shadow: 0 0 2em #38e1ff66; }
+.btn.ghost { background: #0a1a2acc; color: var(--c); border: 1px solid #38e1ff66; }
+.btn.warn { background: var(--warn); color: #fff; }
+.btn.gold { background: var(--gold); color: #2a1a00; }
+.btn[disabled] { opacity: .35; }
+.pill { background: #000a; border: 1px solid #ffffff1f; padding: .3em .8em; border-radius: .7em; white-space: nowrap; }
+.card { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 1.1em; }
+.title { font-weight: 900; letter-spacing: .12em; }
+.mute { color: var(--mute); }
+.gem::before { content: "◆"; color: var(--c); margin-right: .25em; }
+.core::before { content: "◈"; color: var(--p); margin-right: .25em; }
+
+/* «камера»: комната — стена, пол, окно, диван */
+.room { position: absolute; inset: 0; background:
+  linear-gradient(180deg, #4b4f57 0%, #5a5d63 52%, #3a3328 52%, #2a241c 100%); }
+.room::before { content: ""; position: absolute; left: 8%; top: 12%; width: 18%; height: 30%; background: linear-gradient(135deg, #9fb6c9, #6d8296); border: .5cqw solid #2c2f35; opacity: .6; }
+.room::after { content: ""; position: absolute; right: 10%; top: 38%; width: 30%; height: 17%; background: #5b3b2e; border-radius: 1cqw 1cqw .3cqw .3cqw; box-shadow: inset 0 -2cqw #4a2f24; opacity: .8; }
+.dim::after { content: ""; position: absolute; inset: 0; background: #020509aa; }
+.floorgrid { position: absolute; left: -20%; right: -20%; top: 52%; bottom: -30%; background:
+  repeating-linear-gradient(90deg, #38e1ff55 0 2px, transparent 2px 8%), repeating-linear-gradient(0deg, #38e1ff55 0 2px, transparent 2px 10%);
+  transform: perspective(30cqw) rotateX(60deg); transform-origin: top; opacity: .7; }
+
+/* портал */
+.portal { position: absolute; border-radius: 50%; background: conic-gradient(from 0deg, #2a0a50, #b36bff, #3d0f73, #d59bff, #2a0a50); box-shadow: 0 0 2cqw #b36bffaa, inset 0 0 1.5cqw #000; border: .35cqw solid #d59bff; animation: spin 6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* кабина */
+.cockpit { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cross { position: absolute; left: 50%; top: 50%; width: 4.2cqw; height: 4.2cqw; transform: translate(-50%, -50%); border: .2cqw solid var(--c); border-radius: 50%; }
+.cross::before, .cross::after { content: ""; position: absolute; background: var(--c); }
+.cross::before { left: 50%; top: -30%; bottom: -30%; width: .2cqw; transform: translateX(-50%); }
+.cross::after { top: 50%; left: -30%; right: -30%; height: .2cqw; transform: translateY(-50%); }
+.cross.lock { border-color: var(--warn); }
+.cross.lock::before, .cross.lock::after { background: var(--warn); }
+.lockbox { position: absolute; border: .2cqw solid var(--warn); border-radius: .5cqw; }
+.lockbox span { position: absolute; left: 105%; top: -.4em; font: 600 .85em monospace; color: #ff8a7a; white-space: nowrap; }
+.bar { height: .9em; background: #000a; border: 1px solid #ffffff33; border-radius: 1em; overflow: hidden; }
+.bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--ok), #c8ff5d); }
+.bar.heat i { background: linear-gradient(90deg, var(--c), var(--gold), var(--warn)); }
+.ic { display: inline-block; width: .9em; height: .9em; margin: 0 .15em; vertical-align: -.1em; }
+.ic.col { border-radius: 50%; background: #9fe8ff; box-shadow: 0 0 .4em var(--c); }
+.ic.cry { background: var(--ok); transform: rotate(45deg) scale(.8); }
+.ic.lost { opacity: .25; }
+.fire { position: absolute; right: 3%; bottom: 6%; width: 10cqw; height: 10cqw; border-radius: 50%; background: radial-gradient(circle, #ff6a3a, #b0200e); border: .3cqw solid #ffd0a0; display: grid; place-items: center; font-weight: 900; color: #fff; box-shadow: 0 0 2cqw #ff5a2a88; }
+.slot { position: absolute; width: 6.2cqw; height: 6.2cqw; border-radius: 1.2cqw; background: #0a1a2ad9; border: .2cqw solid #38e1ff88; display: grid; place-items: center; text-align: center; font-size: .8em; line-height: 1.1; }
+.slot b { display: block; font-size: 1.5em; }
+.slot .cd { position: absolute; inset: 0; border-radius: inherit; background: conic-gradient(#000a 0 40%, transparent 40%); }
+.msg { position: absolute; left: 50%; transform: translateX(-50%); background: #0a1a2acc; border: 1px solid #38e1ff66; border-radius: .8em; padding: .4em 1em; white-space: nowrap; }
+.arrow { position: absolute; width: 0; height: 0; border-left: .9cqw solid transparent; border-right: .9cqw solid transparent; border-bottom: 1.7cqw solid var(--p); filter: drop-shadow(0 0 .5cqw var(--p)); }
+.arrow.danger { border-bottom-color: var(--warn); filter: drop-shadow(0 0 .5cqw var(--warn)); }
+
+/* Мара */
+.mara { width: 7cqw; height: 7cqw; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #9ff3ff 0 14%, #146a8a 15% 34%, #0a2a3d 35% 60%, #061520 61%); border: .25cqw solid var(--c); box-shadow: 0 0 1.5cqw #38e1ff77; flex: none; position: relative; }
+.mara::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 24%; height: 7%; background: var(--c); border-radius: 1em; opacity: .7; animation: talk .5s infinite alternate; }
+@keyframes talk { to { transform: scaleX(.4); } }
+
+/* враги (иконки) */
+.enemy { width: 100%; height: 100%; }
+.stars { color: var(--gold); letter-spacing: .15em; }
+.stars .off { color: #ffffff30; }
+.lock { filter: grayscale(1) brightness(.6); }
+.tag { display: inline-block; font-size: .75em; font-weight: 700; padding: .1em .5em; border-radius: .4em; }
+.tag.L { background: #2a5a3a; color: #aef5c4; } .tag.M { background: #5a4a1a; color: #ffe9a6; }
+.tag.H { background: #5a2424; color: #ffb3a6; } .tag.B { background: #4a1f66; color: #e3c2ff; }
+.pips { letter-spacing: .1em; color: var(--c); } .pips .o { color: #ffffff26; }
+.tabs { display: flex; gap: .5em; } .tabs span { padding: .4em 1em; border-radius: .7em; background: #0a1a2a; color: var(--mute); border: 1px solid var(--line); }
+.tabs span.on { background: var(--c); color: #012; border-color: var(--c); font-weight: 700; }
+.row { display: flex; align-items: center; gap: .8em; }
+.toggle { width: 3em; height: 1.6em; border-radius: 1em; background: var(--c); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; right: .2em; top: .2em; width: 1.2em; height: 1.2em; border-radius: 50%; background: #fff; }
+.toggle.offt { background: #2a3a4a; } .toggle.offt::after { right: auto; left: .2em; }
+.slider { flex: 1; height: .45em; border-radius: 1em; background: linear-gradient(90deg, var(--c) var(--v, 60%), #2a3a4a var(--v, 60%)); position: relative; }
+.crack { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+[data-go] { cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ПОСЛЕДНИЙ РУБЕЖ · экраны <small>кликабельный макет — кнопки внутри экранов переключают экраны</small></h1>
+  <nav id="nav"></nav>
+</header>
+<main>
+  <p class="flow" id="flow"></p>
+  <div class="phone" id="phone">
+
+  <!-- 1. ЗАСТАВКА -->
+  <section class="scr" data-id="splash" data-name="Заставка" data-go="menu"
+    data-note="<b>2 секунды, касание пропускает.</b> По чёрному экрану бежит трещина, из неё вырывается фиолетовый свет и вылетает жук-скаут. Звук: стекло → гул портала.">
+    <div class="abs" style="inset:0;background:radial-gradient(ellipse at 50% 55%,#1b0b33,#000 60%)"></div>
+    <svg class="crack" viewBox="0 0 200 90" preserveAspectRatio="none"><g stroke="#fff" stroke-width=".35" fill="none" opacity=".85"><path d="M100 45 L88 30 L80 12 M100 45 L118 36 L140 30 L160 18 M100 45 L110 60 L108 80 M100 45 L82 52 L60 58 L40 70 M100 45 L96 62 L88 75"/><path d="M92 38 L108 40 L106 52 L94 51Z" stroke-width=".2"/></g></svg>
+    <div class="abs" style="left:46%;top:38%;width:8%;aspect-ratio:1;border-radius:50%;background:radial-gradient(#e0b8ff,#b36bff66 50%,transparent 70%);filter:blur(.3cqw)"></div>
+    <div class="abs title" style="left:0;right:0;top:62%;text-align:center;font-size:3.6em;line-height:1;text-shadow:0 0 2cqw var(--c)">ПОСЛЕДНИЙ РУБЕЖ</div>
+    <div class="abs mute" style="left:0;right:0;top:84%;text-align:center">коснись, чтобы продолжить</div>
+  </section>
+
+  <!-- 2. ГЛАВНОЕ МЕНЮ -->
+  <section class="scr" data-id="menu" data-name="Главное меню"
+    data-note="<b>Фон — живая камера</b> с затемнением: игра сразу ощущается как AR; в комнате мерцает портал. Главная кнопка ведёт в следующий непройденный сектор. Сверху — кристаллы ◆ и ядра ◈. Слева Мара бросает короткую реплику (меняется каждый заход).">
+    <div class="room dim"></div>
+    <div class="portal" style="left:68%;top:20%;width:13cqw;height:13cqw;opacity:.75"></div>
+    <div class="abs row" style="right:3%;top:5%;gap:.6em"><span class="pill gem">1 240</span><span class="pill core">3</span><span class="pill" data-go="settings">⚙</span></div>
+    <div class="abs" style="left:5%;top:9%">
+      <div class="title" style="font-size:3.4em;line-height:.95;text-shadow:0 0 2cqw var(--c)">ПОСЛЕДНИЙ<br>РУБЕЖ</div>
+      <div class="mute" style="margin-top:.4em">Оператор-7 · ранг «Страж II»</div>
+    </div>
+    <div class="abs" style="left:5%;top:47%;display:flex;flex-direction:column;gap:.8em;width:38%">
+      <button class="btn big" data-go="briefing">▶ В БОЙ · Сектор 2 «Кухня»</button>
+      <div class="row" style="gap:.6em">
+        <button class="btn ghost" data-go="campaign">Кампания</button>
+        <button class="btn ghost" data-go="arsenal">Арсенал</button>
+        <button class="btn ghost" data-go="hangar">Ангар</button>
+        <button class="btn ghost" data-go="bestiary">Бестиарий</button>
+      </div>
+    </div>
+    <div class="abs row card" style="left:50%;bottom:6%;padding:.7em 1em;max-width:44%">
+      <div class="mara" style="width:4.5cqw;height:4.5cqw"></div>
+      <div><b style="color:var(--c)">Мара</b><br>«На кухне фиксирую два Разлома. Хваталки любят кристаллы — береги их.»</div>
+    </div>
+  </section>
+
+  <!-- 3. КАМПАНИЯ -->
+  <section class="scr" data-id="campaign" data-name="Кампания"
+    data-note="<b>5 секторов</b> — карточки листаются пальцем. Звёзды: груз цел / корпус ≥60% / без ремкомплектов. Под замком — силуэт сектора и условие открытия. После 3-го сектора открывается «Бесконечная оборона».">
+    <div class="abs" style="inset:0;background:radial-gradient(ellipse at 50% 0%,#11263a,var(--bg) 70%)"></div>
+    <div class="abs row" style="left:3%;top:5%;right:3%;justify-content:space-between">
+      <div class="row"><span class="pill" data-go="menu">‹ Назад</span><span class="title" style="font-size:1.6em">КАМПАНИЯ</span></div>
+      <span class="pill gem">1 240</span>
+    </div>
+    <div class="abs" style="left:3%;right:3%;top:20%;bottom:16%;display:grid;grid-template-columns:repeat(5,1fr);gap:1.2%">
+      <div class="card" style="padding:1em;display:flex;flex-direction:column;gap:.4em"><div class="mute">Сектор 1</div><b style="font-size:1.25em">Гостиная</b><div class="mute" style="font-size:.85em">«Первый Разлом»</div><div style="flex:1;border-radius:.7em;background:linear-gradient(#5a5d63 55%,#3a3328 55%);position:relative"><div class="portal" style="left:35%;top:15%;width:4cqw;height:4cqw"></div></div><div class="stars">★★★</div><div class="mute" style="font-size:.85em">рекорд: 5/5 волн</div></div>
+      <div class="card" style="padding:1em;display:flex;flex-direction:column;gap:.4em;border-color:var(--c);box-shadow:0 0 1.5cqw #38e1ff44"><div style="color:var(--c)">Сектор 2 · сейчас</div><b style="font-size:1.25em">Кухня</b><div class="mute" style="font-size:.85em">«Сбор урожая»</div><div style="flex:1;border-radius:.7em;background:linear-gradient(#6c6a62 55%,#444 55%);position:relative"><div class="portal" style="left:20%;top:12%;width:4cqw;height:4cqw"></div><div class="portal" style="left:58%;top:22%;width:3.4cqw;height:3.4cqw"></div></div><div class="stars"><span class="off">★★★</span></div><button class="btn" data-go="briefing">Играть</button></div>
+      <div class="card lock" style="padding:1em;display:flex;flex-direction:column;gap:.4em"><div class="mute">Сектор 3</div><b style="font-size:1.25em">Спальня</b><div class="mute" style="font-size:.85em">«Тишина» · босс</div><div style="flex:1;border-radius:.7em;background:#1a2230;display:grid;place-items:center;font-size:2em"><svg viewBox="0 0 24 24" style="width:2.2em;height:2.2em;opacity:.6"><use href="#i-lock"/></svg></div><div class="mute" style="font-size:.85em">пройди сектор 2</div></div>
+      <div class="card lock" style="padding:1em;display:flex;flex-direction:column;gap:.4em"><div class="mute">Сектор 4</div><b style="font-size:1.25em">Подвал</b><div class="mute" style="font-size:.85em">«Глубокий Разлом» · босс</div><div style="flex:1;border-radius:.7em;background:#1a2230;display:grid;place-items:center;font-size:2em"><svg viewBox="0 0 24 24" style="width:2.2em;height:2.2em;opacity:.6"><use href="#i-lock"/></svg></div><div class="mute" style="font-size:.85em">пройди сектор 3</div></div>
+      <div class="card lock" style="padding:1em;display:flex;flex-direction:column;gap:.4em"><div class="mute">Сектор 5</div><b style="font-size:1.25em">Орбита</b><div class="mute" style="font-size:.85em">«Ядро» · финал</div><div style="flex:1;border-radius:.7em;background:#1a2230;display:grid;place-items:center;font-size:2em"><svg viewBox="0 0 24 24" style="width:2.2em;height:2.2em;opacity:.6"><use href="#i-lock"/></svg></div><div class="mute" style="font-size:.85em">пройди сектор 4</div></div>
+    </div>
+    <div class="abs mute" style="left:3%;bottom:6%">∞ Бесконечная оборона — откроется после сектора 3</div>
+  </section>
+
+  <!-- 4. БРИФИНГ -->
+  <section class="scr" data-id="briefing" data-name="Брифинг"
+    data-note="<b>Перед сектором:</b> Мара объясняет задачу (3–5 реплик, можно пропустить), показывает новых врагов сектора и советует оружие. Справа — выбор лоадаута: зенитка всегда + 2 слота доп. оружия из купленного. Кнопка «Подготовить комнату» запускает AR.">
+    <div class="abs" style="inset:0;background:radial-gradient(ellipse at 20% 30%,#10304a,var(--bg) 65%)"></div>
+    <div class="abs row" style="left:3%;top:5%"><span class="pill" data-go="campaign">‹ Кампания</span><span class="title" style="font-size:1.5em">СЕКТОР 2 · КУХНЯ</span></div>
+    <div class="abs card" style="left:3%;top:20%;width:52%;bottom:8%;padding:1.2em;display:flex;flex-direction:column;gap:1em">
+      <div class="row" style="align-items:flex-start"><div class="mara"></div><div><b style="color:var(--c)">Мара</b><p style="margin:.3em 0 0;line-height:1.45">«Хор перешёл от разведки к сбору. Хваталки поднимают груз манипулятором — отстрели руку, и груз упадёт целым. Щитоносцев зенитка в лоб не возьмёт. Возьми ракеты.»</p></div></div>
+      <div><div class="mute" style="margin-bottom:.5em">Новые угрозы</div>
+        <div class="row" style="gap:1em">
+          <div style="text-align:center;width:7em"><svg viewBox="0 0 60 40" style="width:5em"><use href="#e-grabber"/></svg><div><span class="tag M">M</span> Хваталка</div></div>
+          <div style="text-align:center;width:7em"><svg viewBox="0 0 60 40" style="width:5em"><use href="#e-shield"/></svg><div><span class="tag M">M</span> Щитоносец</div></div>
+          <div style="text-align:center;width:7em"><svg viewBox="0 0 60 40" style="width:5em"><use href="#e-bomber"/></svg><div><span class="tag M">M</span> Бомбардир</div></div>
+        </div></div>
+      <div class="mute" style="margin-top:auto">7 волн · груз: 3–5 · награда до <span class="gem">320</span></div>
+    </div>
+    <div class="abs card" style="left:58%;right:3%;top:20%;bottom:8%;padding:1.2em;display:flex;flex-direction:column;gap:.9em">
+      <b>Вооружение</b>
+      <div class="row card" style="padding:.6em .9em;background:#0a1a2a"><span style="font-size:1.6em">⁂</span><div style="flex:1"><b>Зенитка</b><div class="mute" style="font-size:.85em">ур. 3 · всегда с тобой</div></div></div>
+      <div class="row card" style="padding:.6em .9em;background:#0a1a2a;border-color:var(--c)"><svg viewBox="0 0 24 24" style="width:1.4em;height:1.4em;vertical-align:middle"><use href="#w-rocket"/></svg><div style="flex:1"><b>Ракеты «Копьё»</b><div style="color:var(--ok);font-size:.85em">рекомендовано против щитоносцев</div></div><span class="mute">слот 1</span></div>
+      <div class="row card" style="padding:.6em .9em;background:#0a1a2a;border-style:dashed"><span style="font-size:1.6em;opacity:.4">+</span><div style="flex:1" class="mute">Пустой слот — выбрать</div><span class="mute">слот 2</span></div>
+      <button class="btn big" style="margin-top:auto" data-go="prep">Подготовить комнату ›</button>
+    </div>
+  </section>
+
+  <!-- 5. ПОДГОТОВКА КОМНАТЫ -->
+  <section class="scr" data-id="prep" data-name="Подготовка комнаты"
+    data-note="<b>AR-шаг 1–2.</b> ARCore подсвечивает найденный пол сеткой; голубое кольцо — куда встанет груз. Касание — поставить, касание по грузу — убрать. Сектор 60°, где откроются порталы, показан полупрозрачным веером, чтобы груз ставили перед собой. «Авто» ставит 3 штуки веером.">
+    <div class="room"></div>
+    <div class="floorgrid"></div>
+    <svg class="abs" viewBox="0 0 200 90" preserveAspectRatio="none" style="inset:0;width:100%;height:100%"><path d="M100 90 L55 40 L145 40 Z" fill="#b36bff" opacity=".12"/><path d="M100 90 L55 40 M100 90 L145 40" stroke="#b36bff" stroke-width=".3" stroke-dasharray="1.5 1" opacity=".8"/></svg>
+    <div class="abs mute" style="left:50%;top:37%;transform:translateX(-50%);color:#d9b8ff;font-size:.85em">сектор порталов · 60°</div>
+    <div class="abs" style="left:42%;top:66%;width:5cqw;height:2cqw;border:.35cqw solid var(--c);border-radius:50%;box-shadow:0 0 1cqw var(--c)"></div>
+    <div class="abs" style="left:30%;top:58%;text-align:center"><div style="width:1.1cqw;height:1.1cqw;border-radius:50%;background:#ffe2c8;margin:0 auto"></div><div style="width:1.4cqw;height:2.4cqw;border-radius:1cqw;background:#9fe8ff;margin:.1cqw auto 0;box-shadow:0 0 1cqw var(--c)"></div><div style="width:3cqw;height:1cqw;border:.25cqw solid var(--c);border-radius:50%;margin-top:-.4cqw"></div></div>
+    <div class="abs" style="left:60%;top:59%;text-align:center"><div style="width:1.8cqw;height:2.8cqw;background:var(--ok);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);margin:0 auto;filter:drop-shadow(0 0 .8cqw var(--ok))"></div><div style="width:3cqw;height:1cqw;border:.25cqw solid var(--c);border-radius:50%;margin-top:-.2cqw"></div></div>
+    <div class="abs row" style="left:3%;top:5%;gap:.6em"><span class="pill">Шаг 2 из 2 · Расставь груз</span><span class="pill">поставлено: <b>2</b> / 3–5</span></div>
+    <div class="abs card" style="left:50%;bottom:5%;transform:translateX(-50%);padding:.9em 1.2em;text-align:center;min-width:42%">
+      <div style="margin-bottom:.6em">Коснись пола перед собой, чтобы поставить груз</div>
+      <div class="row" style="justify-content:center"><button class="btn ghost">Авто</button><button class="btn" disabled>В БОЙ</button><button class="btn" data-go="battle">В БОЙ (3) ›</button></div>
+    </div>
+  </section>
+
+  <!-- 6. БОЙ -->
+  <section class="scr" data-id="battle" data-name="Бой (HUD)"
+    data-note="<b>Кабина + HUD.</b> Прицел в центре; враг на линии огня — крестик краснеет, рамка с именем и дальностью. Снизу: перегрев зенитки, большая кнопка «ОГОНЬ» справа; слоты доп. оружия над ней (ракеты — держи на цели 0,6 с; ЭМИ — по кнопке, с перезарядкой). Сверху: волна, враги, груз, кристаллы, корпус. Красная стрелка у края — по тебе целятся вне экрана. Пауза — значок ‖ слева сверху.">
+    <div class="room"></div>
+    <div class="portal" style="left:26%;top:22%;width:9cqw;height:9cqw"></div>
+    <div class="portal" style="left:48%;top:10%;width:7cqw;height:7cqw"></div>
+    <div class="portal" style="left:64%;top:26%;width:8cqw;height:8cqw"></div>
+    <svg class="abs" viewBox="0 0 60 40" style="left:47%;top:41%;width:6cqw"><use href="#e-scout"/></svg>
+    <div class="lockbox" style="left:46%;top:38%;width:8cqw;height:8cqw"><span>Жук-скаут · 6.4 м</span></div>
+    <svg class="abs" viewBox="0 0 60 40" style="left:68%;top:48%;width:7cqw"><use href="#e-grabber"/></svg>
+    <div class="abs" style="left:71%;top:64%;width:1.6cqw;height:2.6cqw;background:var(--ok);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);filter:drop-shadow(0 0 .6cqw var(--ok))"></div>
+    <div class="abs" style="left:69%;top:46%;width:4cqw;height:8cqw;background:linear-gradient(#ffd0ff33,transparent);clip-path:polygon(35% 0,65% 0,100% 100%,0 100%)"></div>
+    <div class="abs" style="left:73%;top:44%;width:.6cqw;height:.6cqw;border-radius:50%;background:#555;box-shadow:0 0 1cqw 1cqw #6668"></div>
+    <svg class="abs" viewBox="0 0 200 90" preserveAspectRatio="none" style="inset:0;width:100%;height:100%"><path d="M78 72 L99 46" stroke="#9ff" stroke-width=".5" opacity=".8"/><path d="M122 72 L101 46" stroke="#9ff" stroke-width=".3" opacity=".5"/></svg>
+    <svg class="cockpit" viewBox="0 0 1600 900" preserveAspectRatio="none"><use href="#cockpit"/></svg>
+    <svg class="abs" viewBox="0 0 200 90" preserveAspectRatio="none" style="inset:0;width:100%;height:100%"><g fill="#1c232c" stroke="#3a4552" stroke-width=".3"><path d="M70 90 L76 70 L80 71 L78 90Z"/><path d="M130 90 L124 70 L120 71 L122 90Z"/></g><rect x="76.5" y="69" width="3" height="1.2" fill="#38e1ff" opacity=".8"/><rect x="120.5" y="69" width="3" height="1.2" fill="#38e1ff" opacity=".8"/></svg>
+    <div class="cross lock"></div>
+    <div class="abs row" style="left:7%;top:3.5%;right:7%;gap:.6em">
+      <span class="pill" data-go="pause">‖</span><span class="pill">ВОЛНА 3/7</span><span class="pill">врагов: 6</span>
+      <span class="pill"><i class="ic col"></i><i class="ic cry"></i><i class="ic col"></i><i class="ic cry lost"></i></span>
+      <span class="pill gem">48</span>
+      <div class="bar" style="flex:1;max-width:22%"><i style="width:72%"></i></div><span class="mute" style="font-size:.85em">КОРПУС 72%</span>
+    </div>
+    <div class="msg" style="top:14%">Мара: хваталка у кристалла — бей по руке!</div>
+    <div class="arrow danger" style="right:9%;top:48%;transform:rotate(90deg)"></div>
+    <div class="abs" style="left:3%;bottom:7%;width:17%"><div style="font-size:.85em">ЗЕНИТКА</div><div class="bar heat" style="margin-top:.3em"><i style="width:55%"></i></div></div>
+    <div class="slot" style="right:15%;bottom:22%"><div><svg viewBox="0 0 24 24" style="width:1.4em;height:1.4em;vertical-align:middle"><use href="#w-rocket"/></svg><br>×4</div></div>
+    <div class="slot" style="right:15%;bottom:6%"><div class="cd"></div><div><b>ϟ</b>ЭМИ</div></div>
+    <div class="fire">ОГОНЬ</div>
+  </section>
+
+  <!-- 7. ПАУЗА -->
+  <section class="scr" data-id="pause" data-name="Пауза"
+    data-note="<b>Бой замирает</b>, камера затемнена. «Перекалибровать» заново ищет пол, если картинка уплыла. Выход — с подтверждением: прогресс волны теряется, кристаллы за сбитых сохраняются.">
+    <div class="room"></div><div class="abs" style="inset:0;background:#020509cc;backdrop-filter:blur(.4cqw)"></div>
+    <div class="abs card" style="left:50%;top:50%;transform:translate(-50%,-50%);padding:1.6em 2.4em;text-align:center;display:flex;flex-direction:column;gap:.8em;min-width:34%">
+      <div class="title" style="font-size:2em">ПАУЗА</div>
+      <div class="mute">Сектор 2 · волна 3/7 · корпус 72%</div>
+      <button class="btn" data-go="battle">Продолжить</button>
+      <button class="btn ghost">Перекалибровать пол</button>
+      <button class="btn ghost" data-go="settings">Настройки</button>
+      <button class="btn ghost" style="color:var(--warn);border-color:#ff4a3a66" data-go="menu">Выйти в меню</button>
+    </div>
+  </section>
+
+  <!-- 8. ПОБЕДА -->
+  <section class="scr" data-id="win" data-name="Итоги: победа"
+    data-note="<b>Звёзды</b> появляются по одной со звуком. Награда считается «бегущими» цифрами. Новый враг → кнопка в бестиарий. Если хватает кристаллов на улучшение — подсказка «Можно улучшить» ведёт в Ангар.">
+    <div class="room dim"></div>
+    <div class="abs card" style="left:50%;top:50%;transform:translate(-50%,-50%);width:62%;padding:1.4em 2em;display:grid;grid-template-columns:1fr 1fr;gap:1.2em">
+      <div style="grid-column:1/3;text-align:center"><div class="title" style="font-size:2.4em;color:var(--ok)">СЕКТОР ОЧИЩЕН</div><div class="stars" style="font-size:2.6em">★★<span class="off">★</span></div></div>
+      <div><table style="border-spacing:1em .3em;margin-left:-1em"><tr><td class="mute">Сбито</td><td><b>31</b></td></tr><tr><td class="mute">Груз спасён</td><td><b>5/5</b> ★</td></tr><tr><td class="mute">Корпус</td><td><b>48%</b></td></tr><tr><td class="mute">Точность</td><td><b>64%</b></td></tr></table></div>
+      <div style="display:flex;flex-direction:column;gap:.6em"><div class="card" style="padding:.7em 1em;background:#0a1a2a"><span class="mute">Награда</span><div style="font-size:1.6em"><span class="gem">286</span> <span class="core" style="margin-left:.5em">1</span></div></div>
+      <div class="card row" style="padding:.6em 1em;background:#0a1a2a;border-color:var(--p)" data-go="bestiary"><svg viewBox="0 0 60 40" style="width:3.6em"><use href="#e-shield"/></svg><div>Новый враг<br><b>Щитоносец</b> ›</div></div></div>
+      <div style="grid-column:1/3" class="row"><button class="btn gold" data-go="hangar">Можно улучшить ›</button><span style="flex:1"></span><button class="btn ghost" data-go="briefing">Повторить</button><button class="btn" data-go="campaign">Дальше</button></div>
+    </div>
+  </section>
+
+  <!-- 9. ПОРАЖЕНИЕ -->
+  <section class="scr" data-id="lose" data-name="Итоги: поражение"
+    data-note="<b>Корпус 0%</b>: экран покрывается трещинами и осыпается вниз, звук разбитого стекла, затем «СВЯЗЬ ПОТЕРЯНА». Кристаллы за сбитых сохраняются, чтобы поражение тоже двигало прокачку. Совет Мары — по причине поражения.">
+    <div class="room"></div><div class="abs" style="inset:0;background:#1a0000aa"></div>
+    <svg class="crack" viewBox="0 0 200 90" preserveAspectRatio="none"><g stroke="#fff" stroke-width=".3" fill="none" opacity=".75"><path d="M40 30 L28 18 L20 4 M40 30 L58 22 L80 20 M40 30 L44 50 L40 70 L44 90 M40 30 L20 40 L0 44"/><path d="M150 55 L170 40 L196 34 M150 55 L160 75 L158 90 M150 55 L128 62 L100 66 L80 80 M150 55 L140 30 L146 8"/><path d="M34 26 L48 27 L45 38 L33 35Z M144 50 L156 48 L158 60 L146 61Z" stroke-width=".2"/></g><g fill="#000" opacity=".35"><path d="M40 30 L58 22 L44 50Z"/><path d="M150 55 L170 40 L160 75Z"/></g></svg>
+    <div class="abs card" style="left:50%;top:50%;transform:translate(-50%,-50%);padding:1.4em 2.2em;text-align:center;min-width:40%">
+      <div class="title" style="font-size:2.4em;color:var(--warn)">СВЯЗЬ ПОТЕРЯНА</div>
+      <div class="mute" style="margin:.3em 0 .8em">Сектор 2 · дошёл до волны 5/7</div>
+      <div class="row card" style="padding:.6em 1em;background:#0a1a2a;text-align:left"><div class="mara" style="width:3.6cqw;height:3.6cqw"></div><div>«Стрелки били с фланга. Сбивай сгустки — и возьми ЭМИ.»</div></div>
+      <div style="margin:.8em 0">Сохранено: <span class="gem">74</span></div>
+      <div class="row" style="justify-content:center"><button class="btn ghost" data-go="hangar">Ангар</button><button class="btn" data-go="briefing">Ещё раз</button></div>
+    </div>
+  </section>
+
+  <!-- 10. АРСЕНАЛ -->
+  <section class="scr" data-id="arsenal" data-name="Арсенал"
+    data-note="<b>Покупка оружия.</b> Слева список, справа карточка: 3D-модель (вращается пальцем), как пользоваться, против кого лучше, характеристики. Купленное — в лоадаут на брифинге. Прокачка купленного — в Ангаре.">
+    <div class="abs" style="inset:0;background:radial-gradient(ellipse at 70% 40%,#13283d,var(--bg) 70%)"></div>
+    <div class="abs row" style="left:3%;top:5%;right:3%;justify-content:space-between"><div class="row"><span class="pill" data-go="menu">‹ Меню</span><span class="title" style="font-size:1.6em">АРСЕНАЛ</span></div><span class="pill gem">1 240</span></div>
+    <div class="abs" style="left:3%;top:19%;bottom:5%;width:33%;display:flex;flex-direction:column;gap:.5em">
+      <div class="card row" style="padding:.55em .9em"><span style="font-size:1.4em">⁂</span><b style="flex:1">Зенитка</b><span style="color:var(--ok)">ур. 3</span></div>
+      <div class="card row" style="padding:.55em .9em;border-color:var(--c);box-shadow:0 0 1cqw #38e1ff44"><svg viewBox="0 0 24 24" style="width:1.4em;height:1.4em;vertical-align:middle"><use href="#w-rocket"/></svg><b style="flex:1">Ракеты «Копьё»</b><span class="gem">250</span></div>
+      <div class="card row" style="padding:.55em .9em"><span style="font-size:1.4em">≈</span><b style="flex:1">Лазер «Луч»</b><span class="gem">400</span></div>
+      <div class="card row" style="padding:.55em .9em"><span style="font-size:1.4em">ϟ</span><b style="flex:1">Молния «Тесла»</b><span class="gem">450</span></div>
+      <div class="card row" style="padding:.55em .9em"><span style="font-size:1.4em">◎</span><b style="flex:1">ЭМИ-импульс</b><span class="gem">300</span></div>
+      <div class="card row lock" style="padding:.55em .9em"><span style="font-size:1.4em">✦</span><b style="flex:1">Дрон «Оса»</b><span class="mute">сектор 3</span></div>
+    </div>
+    <div class="abs card" style="left:38%;right:3%;top:19%;bottom:5%;padding:1.2em;display:grid;grid-template-columns:1fr 1.1fr;gap:1.2em">
+      <div style="border-radius:1em;background:radial-gradient(circle at 50% 60%,#1d3a55,#0a1420);display:grid;place-items:center;position:relative">
+        <svg viewBox="0 0 120 80" style="width:85%"><g transform="rotate(-18 60 40)"><rect x="18" y="34" width="70" height="12" rx="6" fill="#c8d2de"/><path d="M88 34 L106 40 L88 46Z" fill="#ff5a3a"/><path d="M22 34 L12 26 L28 34Z M22 46 L12 54 L28 46Z" fill="#7b8794"/><rect x="40" y="34" width="4" height="12" fill="#38e1ff"/><path d="M18 37 L6 40 L18 43Z" fill="#ffb03a"/></g></svg>
+        <div class="abs mute" style="bottom:.6em;font-size:.8em">↻ покрути пальцем</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.6em">
+        <b style="font-size:1.4em">Ракеты «Копьё»</b>
+        <div class="mute" style="line-height:1.35;font-size:.92em">Удерживай прицел на цели 0,6 с — захват. Отпусти — самонаводящаяся ракета, урон по площади.</div>
+        <div>Лучше против: <span class="tag M">Щитоносец</span> <span class="tag H">Танк-краб</span></div>
+        <table style="border-spacing:0 .1em;font-size:.92em"><tr><td class="mute" style="width:8em">Урон</td><td class="pips">●●●●<span class="o">●</span></td></tr><tr><td class="mute">Радиус</td><td class="pips">●●●<span class="o">●●</span></td></tr><tr><td class="mute">Боезапас</td><td class="pips">●●<span class="o">●●●</span> ×4</td></tr><tr><td class="mute">Захват</td><td class="pips">●<span class="o">●●●●</span> 1 цель</td></tr></table>
+        <button class="btn" style="margin-top:auto;font-size:1.2em">Купить · ◆ 250</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11. АНГАР -->
+  <section class="scr" data-id="hangar" data-name="Ангар (прокачка)"
+    data-note="<b>Три вкладки:</b> Зенитка · Оружие · Корпус. Каждое улучшение — 5 уровней (точки), цена растёт. Топовые улучшения требуют ядра ◈ с боссов. Слева живое превью: после покупки стволы делают показательную очередь.">
+    <div class="abs" style="inset:0;background:radial-gradient(ellipse at 25% 50%,#13283d,var(--bg) 70%)"></div>
+    <div class="abs row" style="left:3%;top:5%;right:3%;justify-content:space-between"><div class="row"><span class="pill" data-go="menu">‹ Меню</span><span class="title" style="font-size:1.6em">АНГАР</span><div class="tabs" style="margin-left:1em"><span class="on">Зенитка</span><span>Оружие</span><span>Корпус</span></div></div><div class="row" style="gap:.5em"><span class="pill gem">1 240</span><span class="pill core">3</span></div></div>
+    <div class="abs card" style="left:3%;top:19%;bottom:5%;width:34%;display:grid;place-items:center;background:radial-gradient(circle at 50% 70%,#1d3a55,#0a1420)">
+      <svg viewBox="0 0 120 80" style="width:88%"><g fill="#2a323c" stroke="#5a6878" stroke-width=".6"><rect x="20" y="44" width="80" height="16" rx="3"/><rect x="34" y="34" width="20" height="12" rx="2"/><rect x="66" y="34" width="20" height="12" rx="2"/></g><g fill="#7b8794"><rect x="41" y="8" width="5" height="28" rx="2"/><rect x="74" y="8" width="5" height="28" rx="2"/></g><g fill="#1a1f26"><rect x="40" y="6" width="7" height="5" rx="1"/><rect x="73" y="6" width="7" height="5" rx="1"/></g><rect x="30" y="50" width="60" height="2" fill="#38e1ff"/><text x="60" y="74" text-anchor="middle" fill="#8aa3b8" font-size="6">ЗЕНИТКА · УР. 3</text></svg>
+    </div>
+    <div class="abs" style="left:39%;right:3%;top:19%;bottom:5%;display:flex;flex-direction:column;gap:.55em">
+      <div class="card row" style="padding:.6em 1em"><div style="flex:1"><b>Урон</b><div class="mute" style="font-size:.85em">8 → 10 за попадание</div></div><span class="pips">●●●<span class="o">●●</span></span><button class="btn">◆ 120</button></div>
+      <div class="card row" style="padding:.6em 1em"><div style="flex:1"><b>Скорострельность</b><div class="mute" style="font-size:.85em">9 → 10,5 выстр/с</div></div><span class="pips">●●<span class="o">●●●</span></span><button class="btn">◆ 90</button></div>
+      <div class="card row" style="padding:.6em 1em"><div style="flex:1"><b>Охлаждение</b><div class="mute" style="font-size:.85em">перегрев на 20% позже</div></div><span class="pips">●<span class="o">●●●●</span></span><button class="btn">◆ 60</button></div>
+      <div class="card row" style="padding:.6em 1em"><div style="flex:1"><b>Кучность</b><div class="mute" style="font-size:.85em">разброс −25%</div></div><span class="pips">●●●●●</span><button class="btn" disabled>МАКС</button></div>
+      <div class="card row" style="padding:.6em 1em;border-color:var(--p)"><div style="flex:1"><b>Зажигательные снаряды</b><div class="mute" style="font-size:.85em">поджигают броню: +урон со временем</div></div><span class="pips"><span class="o">●●●</span></span><button class="btn" style="background:var(--p);color:#fff">◈ 2</button></div>
+    </div>
+  </section>
+
+  <!-- 12. БЕСТИАРИЙ -->
+  <section class="scr" data-id="bestiary" data-name="Бестиарий"
+    data-note="<b>24 врага</b>: силуэт «?» до первой встречи. Карточка: модель, класс, слабое место (подсвечено), поведение, сколько сбито. Цвет метки — класс: L лёгкий, M средний, H тяжёлый, B босс.">
+    <div class="abs" style="inset:0;background:var(--bg)"></div>
+    <div class="abs row" style="left:3%;top:5%;right:3%;justify-content:space-between"><div class="row"><span class="pill" data-go="menu">‹ Меню</span><span class="title" style="font-size:1.6em">БЕСТИАРИЙ</span></div><span class="mute">открыто 5 / 24</span></div>
+    <div class="abs" id="grid" style="left:3%;top:19%;bottom:5%;width:52%;display:grid;grid-template-columns:repeat(6,1fr);grid-auto-rows:1fr;gap:.5em"></div>
+    <div class="abs card" style="left:57%;right:3%;top:19%;bottom:5%;padding:1.1em;display:flex;flex-direction:column;gap:.5em">
+      <div style="height:38%;border-radius:.8em;background:radial-gradient(circle at 50% 60%,#2a1a1a,#0a0f16);display:grid;place-items:center;position:relative"><svg viewBox="0 0 60 40" style="height:90%"><use href="#e-grabber"/></svg><div class="abs" style="left:46%;top:62%;width:2.4cqw;height:2.4cqw;border:.2cqw solid var(--warn);border-radius:50%;box-shadow:0 0 1cqw var(--warn)"></div></div>
+      <div class="row"><b style="font-size:1.3em">Хваталка</b><span class="tag M">M · средний</span></div>
+      <div class="mute" style="line-height:1.4">Подлетает к грузу и поднимает его манипулятором. Медленная, но крепкая.</div>
+      <div><span style="color:var(--warn)">Слабое место:</span> рука — отстрели, и груз упадёт целым. Глаз-сенсор — двойной урон.</div>
+      <div class="mute" style="margin-top:auto">Сбито: <b style="color:var(--txt)">14</b> · впервые: Сектор 1, волна 3</div>
+    </div>
+  </section>
+
+  <!-- 13. НАСТРОЙКИ -->
+  <section class="scr" data-id="settings" data-name="Настройки"
+    data-note="<b>Доступность — в первую очередь:</b> сила трещин (до 0), слабые эффекты (без вспышек и тряски), режим левши (зеркалит кнопки), субтитры Мары. Высота телефона нужна для запасного режима без найденного пола.">
+    <div class="abs" style="inset:0;background:var(--bg)"></div>
+    <div class="abs row" style="left:3%;top:5%"><span class="pill" data-go="menu">‹ Назад</span><span class="title" style="font-size:1.6em">НАСТРОЙКИ</span></div>
+    <div class="abs" style="left:3%;right:3%;top:19%;bottom:5%;display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.2em">
+      <div class="card" style="padding:1.1em;display:flex;flex-direction:column;gap:.9em"><b style="color:var(--c)">Управление</b>
+        <div>Чувствительность прицела<div class="slider" style="--v:55%;margin-top:.5em"></div></div>
+        <div class="row"><span style="flex:1">Левша (кнопки слева)</span><span class="toggle offt"></span></div>
+        <div class="row"><span style="flex:1">Вибрация</span><span class="toggle"></span></div>
+        <div>Высота телефона: <b>1,3 м</b><div class="slider" style="--v:45%;margin-top:.5em"></div></div></div>
+      <div class="card" style="padding:1.1em;display:flex;flex-direction:column;gap:.9em"><b style="color:var(--c)">Звук</b>
+        <div>Музыка<div class="slider" style="--v:50%;margin-top:.5em"></div></div>
+        <div>Эффекты<div class="slider" style="--v:80%;margin-top:.5em"></div></div>
+        <div>Голос Мары<div class="slider" style="--v:70%;margin-top:.5em"></div></div>
+        <div class="row"><span style="flex:1">Субтитры</span><span class="toggle"></span></div></div>
+      <div class="card" style="padding:1.1em;display:flex;flex-direction:column;gap:.9em"><b style="color:var(--c)">Экран</b>
+        <div>Сила трещин<div class="slider" style="--v:100%;margin-top:.5em"></div></div>
+        <div class="row"><span style="flex:1">Слабые эффекты</span><span class="toggle offt"></span></div>
+        <div class="row"><span style="flex:1">Каркас кабины</span><span class="toggle"></span></div>
+        <button class="btn ghost" style="margin-top:auto;color:var(--warn);border-color:#ff4a3a66">Сбросить прогресс</button></div>
+    </div>
+  </section>
+  </div>
+  <p class="note" id="note"></p>
+</main>
+
+<!-- общие SVG: кабина и враги -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="ck-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f3b49"/><stop offset="1" stop-color="#121820"/></linearGradient>
+    <linearGradient id="ck-s" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#10151c"/><stop offset="1" stop-color="#3e4c5d"/></linearGradient>
+    <g id="cockpit">
+      <path d="M0 0H1600V46C1200 92 400 92 0 46Z" fill="url(#ck-m)" stroke="#55677b" stroke-width="2"/>
+      <path d="M0 0H70L170 900H0Z" fill="url(#ck-s)" stroke="#55677b" stroke-width="2"/>
+      <path d="M1600 0H1530L1430 900H1600Z" fill="url(#ck-s)" stroke="#55677b" stroke-width="2"/>
+      <path d="M0 735C380 772 600 790 800 790S1220 772 1600 735V900H0Z" fill="url(#ck-m)" stroke="#55677b" stroke-width="2"/>
+      <path d="M560 790C620 760 980 760 1040 790L1060 900H540Z" fill="#0d1218" stroke="#38e1ff55" stroke-width="2"/>
+      <g fill="#38e1ff"><circle cx="640" cy="830" r="5"/><circle cx="670" cy="830" r="5" fill="#5dffa0"/><circle cx="930" cy="830" r="5" fill="#ffb03a"/></g>
+    </g>
+    <g id="e-scout"><ellipse cx="30" cy="22" rx="9" ry="6" fill="#39424f"/><rect x="8" y="17" width="14" height="2" rx="1" fill="#5ad7ff"/><rect x="38" y="17" width="14" height="2" rx="1" fill="#5ad7ff"/><circle cx="30" cy="24" r="2" fill="#ff3b2f"/><path d="M30 28 L28 34 L32 34Z" fill="#252b34"/></g>
+    <g id="e-spark"><circle cx="30" cy="20" r="8" fill="#ff7a1a"/><g stroke="#252b34" stroke-width="2.4"><path d="M30 6V10M30 30V34M16 20H20M40 20H44M20 10L23 13M40 10L37 13M20 30L23 27M40 30L37 27"/></g><circle cx="30" cy="20" r="3" fill="#ffd7a0"/></g>
+    <g id="e-grabber"><rect x="16" y="10" width="28" height="12" rx="3" fill="#39424f"/><circle cx="30" cy="16" r="3.5" fill="#ff3b2f"/><rect x="9" y="12" width="6" height="9" rx="2" fill="#252b34"/><rect x="45" y="12" width="6" height="9" rx="2" fill="#252b34"/><path d="M10 21 L12 26 L14 21Z M46 21 L48 26 L50 21Z" fill="#66ccff"/><rect x="29" y="22" width="2" height="9" fill="#252b34"/><path d="M26 31 L30 37 L34 31" stroke="#aab4c2" stroke-width="2" fill="none"/></g>
+    <g id="e-shooter"><circle cx="30" cy="22" r="8" fill="#39424f"/><rect x="18" y="7" width="24" height="1.6" fill="#8892a0"/><rect x="29" y="8" width="2" height="6" fill="#252b34"/><rect x="28" y="27" width="4" height="9" rx="1.5" fill="#252b34"/><circle cx="30" cy="36" r="2" fill="#ff3b2f"/><rect x="19" y="17" width="3" height="10" rx="1" fill="#4d5766"/><rect x="38" y="17" width="3" height="10" rx="1" fill="#4d5766"/></g>
+    <g id="e-shield"><path d="M14 8 Q30 2 46 8 V30 Q30 38 14 30Z" fill="#38e1ff33" stroke="#38e1ff" stroke-width="1.2"/><rect x="22" y="14" width="16" height="12" rx="2" fill="#39424f"/><circle cx="30" cy="19" r="2.2" fill="#ff3b2f"/></g>
+    <g id="e-bomber"><ellipse cx="30" cy="14" rx="16" ry="5" fill="#39424f"/><rect x="24" y="17" width="12" height="6" rx="2" fill="#252b34"/><circle cx="27" cy="29" r="2.5" fill="#ffb03a"/><circle cx="34" cy="33" r="2.5" fill="#ffb03a"/><circle cx="30" cy="14" r="2" fill="#ff3b2f"/></g>
+    <g id="w-rocket"><g transform="rotate(-45 12 12)"><rect x="4" y="10" width="13" height="4" rx="2" fill="#c8d2de"/><path d="M17 10 L21 12 L17 14Z" fill="#ff5a3a"/><path d="M6 10 L3 7 L8 10Z M6 14 L3 17 L8 14Z" fill="#7b8794"/><path d="M4 11 L1 12 L4 13Z" fill="#ffb03a"/></g></g>
+    <g id="i-lock"><rect x="5" y="11" width="14" height="10" rx="2" fill="#8aa3b8"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="#8aa3b8" stroke-width="2.2" fill="none"/></g>
+    <g id="e-unknown"><path d="M18 30 Q30 4 42 30Z" fill="#ffffff14"/><text x="30" y="27" text-anchor="middle" font-size="12" fill="#ffffff40" font-weight="700">?</text></g>
+  </defs>
+</svg>
+
+<script>
+const screens = [...document.querySelectorAll('.scr')];
+const nav = document.getElementById('nav');
+const order = ['splash','menu','campaign','briefing','prep','battle','pause','win','lose','arsenal','hangar','bestiary','settings'];
+const flow = 'Заставка → Меню → Кампания → Брифинг → Подготовка комнаты → Бой → Итоги → Ангар/Арсенал';
+document.getElementById('flow').textContent = flow;
+function show(id) {
+  screens.forEach(s => s.classList.toggle('on', s.dataset.id === id));
+  [...nav.children].forEach(b => b.classList.toggle('on', b.dataset.id === id));
+  const s = screens.find(x => x.dataset.id === id);
+  document.getElementById('note').innerHTML = s.dataset.note;
+  try { history.replaceState(null, '', '#' + id); } catch (e) {}
+}
+order.forEach((id, i) => {
+  const s = screens.find(x => x.dataset.id === id);
+  const b = document.createElement('button');
+  b.dataset.id = id; b.textContent = `${i + 1}. ${s.dataset.name}`;
+  b.onclick = () => show(id);
+  nav.appendChild(b);
+});
+document.getElementById('phone').addEventListener('click', e => {
+  const t = e.target.closest('[data-go]');
+  if (t) { e.stopPropagation(); show(t.dataset.go); }
+});
+// бестиарий: 24 ячейки
+const known = { 0: ['scout','Жук-скаут','L'], 1: ['spark','Искра','L'], 6: ['grabber','Хваталка','M'], 8: ['shooter','Стрелок','M'], 9: ['shield','Щитоносец','M'] };
+const cls = ['L','L','L','L','L','L','M','M','M','M','M','M','M','M','H','H','H','H','H','H','H','B','B','B'];
+const grid = document.getElementById('grid');
+cls.forEach((c, i) => {
+  const k = known[i];
+  const d = document.createElement('div');
+  d.className = 'card';
+  d.style.cssText = `display:flex;flex-direction:column;align-items:center;justify-content:center;padding:.2em;${i === 6 ? 'border-color:var(--c);box-shadow:0 0 1cqw #38e1ff55' : ''}`;
+  d.innerHTML = `<svg viewBox="0 0 60 40" style="width:90%"><use href="#e-${k ? k[0] : 'unknown'}"/></svg><span class="tag ${c}" style="font-size:.65em">${k ? k[1] : c}</span>`;
+  grid.appendChild(d);
+});
+show(order.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'menu');
+</script>
+</body>
+</html>

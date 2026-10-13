@@ -8,6 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 cp -r "$ROOT/game/dist/." "$TMP/"
 mkdir "$TMP/xr-test" && cp -r "$ROOT/xr-test/dist/." "$TMP/xr-test/"
+mkdir "$TMP/design" && cp "$ROOT/docs/design/screens.html" "$TMP/design/index.html"
 cd "$TMP"
 git init -q -b gh-pages
 git add -A
