@@ -1,7 +1,7 @@
 # Tasks
 
 ## 0. Проверка на железе
-- [ ] 0.1 Страница-тест WebXR: куб на найденном полу + DOM Overlay на Xiaomi 14
+- [x] 0.1 Страница-тест WebXR: куб на найденном полу + DOM Overlay на Xiaomi 14
 
 ## 1. Основа
 - [ ] 1.1 Vite + TypeScript + three.js + Vitest, структура `core/ render/ xr/ input/ ui/ data/`
