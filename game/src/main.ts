@@ -9,6 +9,7 @@ import { ENEMIES } from './data/enemies';
 import { SECTOR1 } from './data/sector1';
 import { Sfx } from './audio/sfx';
 import { buildCargo } from './render/meshes';
+import { GunRig } from './render/guns';
 import { Stage } from './render/stage';
 import { CrackLayer } from './ui/cracks';
 import { Hud, type Indicator } from './ui/hud';
@@ -40,6 +41,7 @@ let session: XRSession | null = null;
 let hitSource: XRHitTestSource | null = null;
 let world: World | null = null;
 let stage: Stage | null = null;
+const guns = new GunRig();
 let last = 0;
 let demoYaw = 0, demoPitch = 0;
 let spaceDown = false;
@@ -115,7 +117,6 @@ function autoPlace(): void {
 
 // ───── камера ─────
 interface CamInfo { pos: THREE.Vector3; dir: THREE.Vector3; view: THREE.Camera }
-const tmpQ = new THREE.Quaternion();
 
 function getCam(): CamInfo {
   if (mode === 'ar' && renderer.xr.isPresenting) {
@@ -221,7 +222,7 @@ function startBattle(): void {
   const cargoPos = prepCargo.map((c) => c.pos);
   const floorY = cargoPos.reduce((s, p) => s + p.y, 0) / cargoPos.length;
   const maxR = Math.max(...cargoPos.map((p) => Math.hypot(p.x - cam.pos.x, p.z - cam.pos.z)));
-  const radius = Math.min(7, Math.max(5, maxR + 2.5));
+  const radius = Math.min(12, Math.max(9, maxR + 6));
   const yaw0 = Math.atan2(cam.dir.x, cam.dir.z);
   const seed = Date.now() & 0xffff;
   const portals = makePortals(v3(cam.pos.x, cam.pos.y, cam.pos.z), yaw0, radius, floorY, makeRng(seed));
@@ -234,6 +235,7 @@ function startBattle(): void {
   scene.remove(reticle, prepLight);
   stage = new Stage(world);
   scene.add(stage.root);
+  scene.add(guns.group);
   cracks.reset();
   hud.hidePrep();
   hud.showBattle(true);
@@ -251,10 +253,7 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
     switch (ev.type) {
       case 'shot': {
         sfx.shot();
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.view.getWorldQuaternion(tmpQ));
-        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tmpQ);
-        const muzzle = cam.pos.clone().addScaledVector(right, 0.09).addScaledVector(up, -0.07).addScaledVector(cam.dir, 0.25);
-        stage!.fx.tracer(muzzle, new THREE.Vector3(ev.end.x, ev.end.y, ev.end.z));
+        stage!.fx.tracer(guns.fire(), new THREE.Vector3(ev.end.x, ev.end.y, ev.end.z));
         break;
       }
       case 'enemyHit': hud.hitMarker(ev.weak); sfx.hit(); break;
@@ -353,6 +352,8 @@ renderer.setAnimationLoop((t, frame) => {
   if (phase === 'battle' && world && stage) {
     const cam = getCam();
     const firing = hud.firing || spaceDown;
+    guns.follow(cam.view);
+    guns.update(dt);
     for (let k = 0; k < FAST; k++) {
       world.update(dt, {
         firing, camPos: v3(cam.pos.x, cam.pos.y, cam.pos.z), camDir: v3(cam.dir.x, cam.dir.y, cam.dir.z),
@@ -373,6 +374,16 @@ renderer.setAnimationLoop((t, frame) => {
       list.push({ id: tr.id, x: s.x, y: s.y, behind: s.behind, danger: tr.danger });
     }
     hud.setIndicators(list);
+
+    // прицел: враг на линии огня → крестик красный, рамка с дальностью
+    const aim = world.pick(v3(cam.pos.x, cam.pos.y, cam.pos.z), v3(cam.dir.x, cam.dir.y, cam.dir.z));
+    if (aim?.enemy) {
+      const e = aim.enemy;
+      const s = toScreen(cam.view, e.pos);
+      const d = cam.pos.distanceTo(new THREE.Vector3(e.pos.x, e.pos.y, e.pos.z));
+      const px = (e.def.radius * (e.def.scale ?? 1) * 2 / d) * innerHeight * 0.5 * cam.view.projectionMatrix.elements[5];
+      hud.setLock({ x: (s.x + 1) / 2, y: (1 - s.y) / 2, size: px * 1.3, label: `${e.def.name} · ${d.toFixed(1)} м` });
+    } else hud.setLock(null);
     hud.update({
       wave: world.waveIdx, waves: world.waveCount, left: world.enemies.length,
       hull: world.player.hull, heat: world.weapon.heat, overheated: world.weapon.overheated,

@@ -10,6 +10,26 @@ export interface EndInfo {
   cargoSaved: number; cargoTotal: number; hullLeft: number;
 }
 
+/** Каркас кабины: стойки фонаря, верхняя дуга, приборная панель. Растягивается на весь экран. */
+const COCKPIT = `
+<svg class="cockpit" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="ck-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f3b49"/><stop offset="1" stop-color="#121820"/></linearGradient>
+    <linearGradient id="ck-s" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#10151c"/><stop offset=".7" stop-color="#2b3644"/><stop offset="1" stop-color="#3e4c5d"/></linearGradient>
+    <linearGradient id="ck-s2" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#10151c"/><stop offset=".7" stop-color="#2b3644"/><stop offset="1" stop-color="#3e4c5d"/></linearGradient>
+    <linearGradient id="ck-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".07"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/><stop offset=".6" stop-color="#9ef" stop-opacity=".04"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#ck-g)"/>
+  <path d="M0 0H1600V46C1200 92 400 92 0 46Z" fill="url(#ck-m)" stroke="#55677b" stroke-width="2"/>
+  <path d="M0 0H70L170 900H0Z" fill="url(#ck-s)" stroke="#55677b" stroke-width="2"/>
+  <path d="M1600 0H1530L1430 900H1600Z" fill="url(#ck-s2)" stroke="#55677b" stroke-width="2"/>
+  <path d="M0 735C380 772 600 790 800 790S1220 772 1600 735V900H0Z" fill="url(#ck-m)" stroke="#55677b" stroke-width="2"/>
+  <path d="M560 790C620 760 980 760 1040 790L1060 900H540Z" fill="#0d1218" stroke="#38e1ff55" stroke-width="2"/>
+  <g fill="#38e1ff"><circle cx="640" cy="830" r="5"/><circle cx="670" cy="830" r="5" fill="#5dffa0"/><circle cx="930" cy="830" r="5" fill="#ffb03a"/><circle cx="960" cy="830" r="5" class="blink"/></g>
+  <g stroke="#38e1ff66" stroke-width="2" fill="none"><path d="M700 860H900"/><path d="M720 875H880"/></g>
+  <g fill="#6a7c90"><circle cx="40" cy="120" r="4"/><circle cx="62" cy="330" r="4"/><circle cx="85" cy="540" r="4"/><circle cx="1560" cy="120" r="4"/><circle cx="1538" cy="330" r="4"/><circle cx="1515" cy="540" r="4"/></g>
+</svg>`;
+
 const $ = <T extends HTMLElement>(root: HTMLElement, sel: string): T => root.querySelector(sel) as T;
 
 /** DOM-интерфейс поверх AR. Кнопки гасят beforexrselect, чтобы касание не считалось выбором в AR. */
@@ -20,7 +40,9 @@ export class Hud {
 
   constructor(private root: HTMLElement) {
     root.innerHTML = `
+      ${COCKPIT}
       <div class="dmg"></div>
+      <div class="lockbox" data-b><i></i><span></span></div>
       <div class="top" data-b><span class="pill wave"></span><span class="pill enemies"></span>
         <span class="pill cargo"></span><span class="pill gems"></span>
         <div class="bar hull"><i></i></div></div>
@@ -104,6 +126,20 @@ export class Hud {
     c.classList.add('hit');
     c.classList.toggle('weak', weak);
     setTimeout(() => c.classList.remove('hit'), 80);
+  }
+
+  /** Рамка вокруг врага на линии огня; null — цели нет. */
+  setLock(lock: { x: number; y: number; size: number; label: string; weak?: boolean } | null): void {
+    const box = $(this.root, '.lockbox');
+    const cross = $(this.root, '.cross');
+    cross.classList.toggle('lock', lock !== null);
+    if (!lock) { box.classList.remove('on'); return; }
+    const s = Math.max(36, Math.min(260, lock.size));
+    box.classList.add('on');
+    box.style.left = `${lock.x * 100}%`;
+    box.style.top = `${lock.y * 100}%`;
+    box.style.width = box.style.height = `${s}px`;
+    $(box, 'span').textContent = lock.label;
   }
 
   damageFlash(): void {

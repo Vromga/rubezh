@@ -35,7 +35,7 @@ export class Stage {
     const c = world.player.pos;
     // дальние порталы крупнее, чтобы оставаться заметными
     const p0 = world.portals[0];
-    this.portalScale = Math.min(2.2, Math.max(1, Math.hypot(p0.x - c.x, p0.z - c.z) / 3.5));
+    this.portalScale = Math.min(1.9, Math.max(1, Math.hypot(p0.x - c.x, p0.z - c.z) / 3.5));
     world.portals.forEach((p) => {
       const pv = buildPortal();
       pv.group.position.copy(toV(p));
@@ -132,7 +132,7 @@ export class Stage {
       if (e.falling) { g.rotation.z += dt * 6; g.rotation.x += dt * 3; }
       ev.spawnT += dt;
       const s = Math.min(1, ev.spawnT / 0.7);
-      g.scale.setScalar(0.2 + 0.8 * (1 - Math.pow(1 - s, 3)));
+      g.scale.setScalar((0.2 + 0.8 * (1 - Math.pow(1 - s, 3))) * (e.def.scale ?? 1));
       ev.view.anim(this.t + e.id);
 
       const frac = e.hp / e.def.hp;

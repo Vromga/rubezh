@@ -29,21 +29,21 @@ function run(w: World, seconds: number, aim: (w: World) => V3 | null = () => nul
 }
 
 describe('порталы', () => {
-  it('порталы только в переднем полукруге (180°)', () => {
+  it('порталы только в секторе 60° перед игроком', () => {
     for (const yaw of [0, 1, -2.5]) {
       for (const q of makePortals(CAM, yaw, 3.5, 0, makeRng(5))) {
         const a = Math.atan2(q.x - CAM.x, q.z - CAM.z);
         let d = a - yaw;
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
-        expect(Math.abs(d)).toBeLessThanOrEqual(Math.PI / 2);
+        expect(Math.abs(d)).toBeLessThanOrEqual(Math.PI / 6 + 0.04);
       }
     }
   });
 
-  it('создаёт 6 порталов на заданном радиусе', () => {
+  it('создаёт 5 порталов на заданном радиусе', () => {
     const p = makePortals(CAM, 0, 3.5, 0, makeRng(3));
-    expect(p).toHaveLength(6);
+    expect(p).toHaveLength(5);
     for (const q of p) expect(Math.hypot(q.x, q.z)).toBeCloseTo(3.5, 5);
   });
 });
@@ -173,14 +173,14 @@ describe('волны', () => {
 });
 
 describe('стрелок', () => {
-  it('остаётся в переднем полукруге и не заходит за спину', () => {
+  it('остаётся перед игроком и не заходит за спину', () => {
     const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, 2)] });
     const e = w.spawn('shooter', 0);
     e.state = 'orbit';
     for (let i = 0; i < 30 * 60; i++) {
       w.update(1 / 30, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
       if (w.result) break;
-      expect(e.pos.z).toBeGreaterThan(-0.5);
+      expect(e.pos.z).toBeGreaterThan(0.5);
     }
   });
 });
@@ -189,6 +189,16 @@ describe('скорость врагов', () => {
   it('скаут облетает комнату неспешно (< 1,2 м/с)', () => {
     expect(ENEMIES.scout.speed).toBeLessThan(1.2);
     expect(ENEMIES.spark.speed).toBeLessThan(1.4);
+  });
+});
+
+describe('прицел', () => {
+  it('pick видит врага на линии огня и не видит вне её', () => {
+    const w = make();
+    const e = w.spawn('scout', 0);
+    e.pos = v3(0, 1.4, 6);
+    expect(w.pick(CAM, v3(0, 0, 1))?.enemy).toBe(e);
+    expect(w.pick(CAM, v3(1, 0, 0))).toBeNull();
   });
 });
 

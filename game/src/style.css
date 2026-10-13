@@ -79,3 +79,16 @@ body.lefty .heat { left: auto; right: 20px; }
 html.ar, html.ar body { background: transparent !important; }
 html.ar * { backdrop-filter: none !important; }
 #diag { position: absolute; left: 8px; bottom: 4px; font: 11px monospace; opacity: .7; color: #cfe; text-shadow: 0 1px 2px #000; pointer-events: none; max-width: 60vw; }
+
+/* кабина */
+.cockpit { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: .93; }
+.cockpit .blink { animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .15; } }
+.cross.lock { border-color: #ff4a3a; box-shadow: 0 0 12px #ff4a3a; }
+.cross.lock::before, .cross.lock::after { background: #ff4a3a; }
+.lockbox { transform: translate(-50%, -50%); opacity: 0; transition: opacity .1s; }
+.lockbox i { position: absolute; inset: 0; border: 2px solid #ff4a3a; border-radius: 6px;
+  clip-path: polygon(0 0,30% 0,30% 3px,70% 3px,70% 0,100% 0,100% 30%,calc(100% - 3px) 30%,calc(100% - 3px) 70%,100% 70%,100% 100%,70% 100%,70% calc(100% - 3px),30% calc(100% - 3px),30% 100%,0 100%,0 70%,3px 70%,3px 30%,0 30%); }
+.lockbox.on { opacity: 1; }
+.lockbox span { position: absolute; left: 100%; top: -4px; margin-left: 6px; font: 600 12px monospace; color: #ff8a7a; white-space: nowrap; text-shadow: 0 1px 2px #000; }
+.top { top: 10px; left: 90px; right: 90px; }

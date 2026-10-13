@@ -16,6 +16,8 @@ export interface EnemyDef {
   behavior: Behavior;
   reward: number;
   parts: PartDef[];
+  /** Масштаб модели и зон попадания (1 — как в описании частей). */
+  scale?: number;
 }
 
 export interface PartState { def: PartDef; hp: number; alive: boolean }

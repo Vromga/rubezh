@@ -125,23 +125,32 @@ export class World {
     }
   }
 
+  /** Что окажется на линии огня (без разброса): для прицела и для выстрела. */
+  pick(origin: V3, d: V3): { enemy: Enemy | null; bolt: Bolt | null; t: number } | null {
+    let bestT = Infinity;
+    let enemy: Enemy | null = null;
+    let bolt: Bolt | null = null;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const t = raySphere(origin, d, e.pos, e.def.radius * (e.def.scale ?? 1) * FLAK.aimAssist);
+      if (t !== null && t < bestT) { bestT = t; enemy = e; bolt = null; }
+    }
+    for (const b of this.bolts) {
+      const t = raySphere(origin, d, b.pos, 0.2);
+      if (t !== null && t < bestT) { bestT = t; bolt = b; enemy = null; }
+    }
+    return enemy || bolt ? { enemy, bolt, t: bestT } : null;
+  }
+
   private shoot(origin: V3, dir0: V3): void {
     this.stats.shots++;
     const d = norm(add(dir0, v3(
       (this.rng() - 0.5) * FLAK.spread * 2, (this.rng() - 0.5) * FLAK.spread * 2, (this.rng() - 0.5) * FLAK.spread * 2,
     )));
-    let bestT = Infinity;
-    let hitEnemy: Enemy | null = null;
-    let hitBolt: Bolt | null = null;
-    for (const e of this.enemies) {
-      if (e.dead) continue;
-      const t = raySphere(origin, d, e.pos, e.def.radius * FLAK.aimAssist);
-      if (t !== null && t < bestT) { bestT = t; hitEnemy = e; hitBolt = null; }
-    }
-    for (const b of this.bolts) {
-      const t = raySphere(origin, d, b.pos, 0.2);
-      if (t !== null && t < bestT) { bestT = t; hitBolt = b; hitEnemy = null; }
-    }
+    const hit = this.pick(origin, d);
+    const bestT = hit?.t ?? Infinity;
+    const hitEnemy = hit?.enemy ?? null;
+    const hitBolt = hit?.bolt ?? null;
     if (hitBolt) {
       this.bolts = this.bolts.filter((b) => b !== hitBolt);
       this.events.push({ type: 'boltShot', pos: clone(hitBolt.pos) });
@@ -163,7 +172,7 @@ export class World {
   }
 
   partWorld(e: Enemy, p: PartState): V3 {
-    return add(e.pos, rotY(p.def.off, e.yaw));
+    return add(e.pos, rotY(mul(p.def.off, e.def.scale ?? 1), e.yaw));
   }
 
   private nearestPart(e: Enemy, at: V3): PartState {
@@ -171,7 +180,7 @@ export class World {
     let bestD = Infinity;
     for (const p of e.parts) {
       if (!p.alive) continue;
-      const dd = dist(this.partWorld(e, p), at) - p.def.r;
+      const dd = dist(this.partWorld(e, p), at) - p.def.r * (e.def.scale ?? 1);
       if (dd < bestD) { bestD = dd; best = p; }
     }
     return best;
@@ -375,9 +384,9 @@ export class World {
   private stepOrbit(e: Enemy, speed: number, dt: number): void {
     const p = this.player.pos;
     e.orbitAng += 0.25 * dt;
-    // покачивается дугой ±70° перед игроком, а не кружит вокруг него
-    const a = this.front + Math.sin(e.orbitAng) * 1.2;
-    const want = v3(p.x + Math.sin(a) * 2.4, p.y + 0.3 + Math.sin(e.t) * 0.2, p.z + Math.cos(a) * 2.4);
+    // покачивается дугой ±30° перед игроком, а не кружит вокруг него
+    const a = this.front + Math.sin(e.orbitAng) * 0.5;
+    const want = v3(p.x + Math.sin(a) * 3.5, p.y + 0.4 + Math.sin(e.t) * 0.3, p.z + Math.cos(a) * 3.5);
     this.flyTo(e, want, Math.min(speed, dist(e.pos, want) * 2 + 0.05), dt, 0);
     e.yaw += wrapAngle(Math.atan2(p.x - e.pos.x, p.z - e.pos.z) - e.yaw) * Math.min(1, dt * 4);
     e.fireCd -= dt;
