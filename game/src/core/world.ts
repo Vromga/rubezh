@@ -16,6 +16,9 @@ export interface WorldOptions {
   portals: V3[];
   waves: WaveDef[];
   enemyDefs: Record<string, EnemyDef>;
+  /** Параметры зенитки из прокачки (иначе — базовые FLAK). */
+  flak?: Partial<typeof FLAK>;
+  maxHull?: number;
   /** Направление «вперёд» (рад., как atan2(x, z)): стрелки держатся в переднем полукруге. */
   front?: number;
 }
@@ -49,6 +52,10 @@ export class World {
   bolts: Bolt[] = [];
   weapon = { heat: 0, overheated: false, cd: 0 };
   stats = { kills: 0, crystals: 0, shots: 0, hits: 0, cargoLost: 0, cargoTotal: 0 };
+  /** сбито по видам врагов и какие виды встречены */
+  killsBy: Record<string, number> = {};
+  seen = new Set<string>();
+  readonly flak: typeof FLAK;
   waveIdx = -1;
   phase: 'intermission' | 'wave' | 'done' = 'intermission';
   result: 'win' | 'lose' | null = null;
@@ -69,6 +76,10 @@ export class World {
     this.waves = o.waves;
     this.defs = o.enemyDefs;
     this.front = o.front ?? 0;
+    this.flak = { ...FLAK, ...(o.flak ?? {}) };
+    const hull = o.maxHull ?? HULL;
+    this.player.hull = hull;
+    this.player.maxHull = hull;
     o.cargo.forEach((p, i) => this.cargo.push({
       id: i + 1, kind: i % 2 === 0 ? 'colonist' : 'crystal', pos: clone(p), state: 'idle', vy: 0,
     }));
@@ -104,17 +115,17 @@ export class World {
     const w = this.weapon;
     w.cd = Math.max(0, w.cd - dt);
     if (!(input.firing && !w.overheated)) {
-      w.heat = Math.max(0, w.heat - FLAK.cooling * dt);
-      if (w.overheated && w.heat <= FLAK.resumeAt) {
+      w.heat = Math.max(0, w.heat - this.flak.cooling * dt);
+      if (w.overheated && w.heat <= this.flak.resumeAt) {
         w.overheated = false;
         this.events.push({ type: 'cooled' });
       }
     }
     if (input.firing && !w.overheated) {
       while (w.cd <= 0) {
-        w.cd += 1 / FLAK.rate;
+        w.cd += 1 / this.flak.rate;
         this.shoot(input.camPos, norm(input.camDir));
-        w.heat += FLAK.heatPerShot;
+        w.heat += this.flak.heatPerShot;
         if (w.heat >= 100) {
           w.heat = 100;
           w.overheated = true;
@@ -132,7 +143,7 @@ export class World {
     let bolt: Bolt | null = null;
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const t = raySphere(origin, d, e.pos, e.def.radius * (e.def.scale ?? 1) * FLAK.aimAssist);
+      const t = raySphere(origin, d, e.pos, e.def.radius * (e.def.scale ?? 1) * this.flak.aimAssist);
       if (t !== null && t < bestT) { bestT = t; enemy = e; bolt = null; }
     }
     for (const b of this.bolts) {
@@ -145,7 +156,7 @@ export class World {
   private shoot(origin: V3, dir0: V3): void {
     this.stats.shots++;
     const d = norm(add(dir0, v3(
-      (this.rng() - 0.5) * FLAK.spread * 2, (this.rng() - 0.5) * FLAK.spread * 2, (this.rng() - 0.5) * FLAK.spread * 2,
+      (this.rng() - 0.5) * this.flak.spread * 2, (this.rng() - 0.5) * this.flak.spread * 2, (this.rng() - 0.5) * this.flak.spread * 2,
     )));
     const hit = this.pick(origin, d);
     const bestT = hit?.t ?? Infinity;
@@ -165,7 +176,7 @@ export class World {
       const point = add(origin, mul(d, bestT));
       this.events.push({ type: 'shot', origin: clone(origin), end: point, hit: true });
       this.stats.hits++;
-      this.damage(e, part, FLAK.damage, point);
+      this.damage(e, part, this.flak.damage, point);
       return;
     }
     this.events.push({ type: 'shot', origin: clone(origin), end: add(origin, mul(d, 10)), hit: false });
@@ -214,6 +225,7 @@ export class World {
     this.dropCargo(e);
     if (byPlayer) {
       this.stats.kills++;
+      this.killsBy[e.def.id] = (this.killsBy[e.def.id] ?? 0) + 1;
       this.stats.crystals += e.def.reward;
     }
     const size = e.def.cls === 'L' ? 0.5 : e.def.cls === 'M' ? 0.9 : 1.4;
@@ -267,6 +279,7 @@ export class World {
 
   spawn(defId: string, portal: number): Enemy {
     const def = this.defs[defId];
+    this.seen.add(defId);
     const e: Enemy = {
       id: this.nextId++, def, pos: clone(this.portals[portal]), vel: v3(), yaw: 0, hp: def.hp,
       parts: def.parts.map((p) => ({ def: p, hp: p.hp, alive: true })),

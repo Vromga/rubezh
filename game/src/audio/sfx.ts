@@ -6,6 +6,11 @@ export class Sfx {
   private lastShot = 0;
   volume = 0.6;
 
+  setVolume(v: number): void {
+    this.volume = v;
+    if (this.master) this.master.gain.value = v;
+  }
+
   /** Создавать только из жеста пользователя (политика браузера). */
   unlock(): void {
     if (this.ctx) { void this.ctx.resume(); return; }

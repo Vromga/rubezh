@@ -92,3 +92,19 @@ html.ar * { backdrop-filter: none !important; }
 .lockbox.on { opacity: 1; }
 .lockbox span { position: absolute; left: 100%; top: -4px; margin-left: 6px; font: 600 12px monospace; color: #ff8a7a; white-space: nowrap; text-shadow: 0 1px 2px #000; }
 .top { top: 10px; left: 90px; right: 90px; }
+
+/* пауза и итоги */
+.end .card h2 { font-size: clamp(22px, 7vh, 34px); }
+.end .stars { color: #ffc94a; font-size: clamp(24px, 8vh, 38px); letter-spacing: .15em; } .end .stars .off { color: #ffffff2a; }
+.endcard { max-width: min(92vw, 640px); }
+.endgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: center; text-align: left; margin: 6px 0 10px; }
+.endgrid table { margin: 0; }
+.reward { font-size: clamp(20px, 6vh, 30px); font-weight: 800; color: #9ff3ff; }
+.advice { background: #0a1a2a; border: 1px solid #38e1ff44; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; text-align: left; font-size: 14px; }
+.end .row { display: flex; gap: 10px; align-items: center; } .end .grow { flex: 1; }
+.end button.ghost, .pausebox button.ghost { background: transparent; color: var(--c); border: 1px solid #38e1ff66; }
+.end button.gold { background: #ffc94a; color: #2a1a00; }
+.end .col { display: flex; flex-direction: column; gap: 10px; }
+.end .mute, .end .small { color: #8aa3b8; } .end .small { font-size: 12px; font-weight: 400; }
+.pausebox .card { min-width: 260px; }
+.top .pause { cursor: pointer; pointer-events: auto; }

@@ -8,7 +8,11 @@ export interface BattleView {
 export interface EndInfo {
   win: boolean; reason: string; kills: number; crystals: number; accuracy: number;
   cargoSaved: number; cargoTotal: number; hullLeft: number;
+  stars: number; bonus: number; sector: number; sectorName: string; wave: number; waves: number;
+  newEnemies: string[]; canUpgrade: boolean; hasNext: boolean;
 }
+
+export type EndChoice = 'next' | 'hangar' | 'retry' | 'menu' | 'bestiary';
 
 /** Каркас кабины: стойки фонаря, верхняя дуга, приборная панель. Растягивается на весь экран. */
 const COCKPIT = `
@@ -35,6 +39,9 @@ const $ = <T extends HTMLElement>(root: HTMLElement, sel: string): T => root.que
 /** DOM-интерфейс поверх AR. Кнопки гасят beforexrselect, чтобы касание не считалось выбором в AR. */
 export class Hud {
   firing = false;
+  onPause?: () => void;
+  onResume?: () => void;
+  onQuit?: () => void;
   private msgT = 0;
   private arrows = new Map<string, HTMLElement>();
 
@@ -43,7 +50,7 @@ export class Hud {
       ${COCKPIT}
       <div class="dmg"></div>
       <div class="lockbox" data-b><i></i><span></span></div>
-      <div class="top" data-b><span class="pill wave"></span><span class="pill enemies"></span>
+      <div class="top" data-b><span class="pill pause tap">‖</span><span class="pill wave"></span><span class="pill enemies"></span>
         <span class="pill cargo"></span><span class="pill gems"></span>
         <div class="bar hull"><i></i></div></div>
       <div class="cross" data-b></div>
@@ -53,7 +60,12 @@ export class Hud {
       <div class="fire tap" data-b>ОГОНЬ</div>
       <div class="arrows"></div>
       <div class="panel tap" data-p style="display:none"></div>
-      <div class="end" style="display:none"></div>`;
+      <div class="end" style="display:none"></div>
+      <div class="end pausebox" style="display:none"><div class="card"><h2>ПАУЗА</h2><div class="pinfo"></div>
+        <div class="col"><button class="resume">Продолжить</button><button class="ghost quit">Выйти в меню</button></div></div></div>`;
+    $(root, '.pause').addEventListener('click', () => this.onPause?.());
+    $(root, '.resume').addEventListener('click', () => this.onResume?.());
+    $(root, '.quit').addEventListener('click', () => this.onQuit?.());
     for (const el of root.querySelectorAll<HTMLElement>('.tap, .panel, .end')) {
       el.addEventListener('beforexrselect', (e) => e.preventDefault());
     }
@@ -170,21 +182,48 @@ export class Hud {
     }
   }
 
-  showEnd(info: EndInfo, onAgain: () => void): void {
+  showPause(on: boolean, info = ''): void {
+    const p = $(this.root, '.pausebox');
+    p.style.display = on ? '' : 'none';
+    $(p, '.pinfo').textContent = info;
+    if (on) this.firing = false;
+  }
+
+  setCockpit(on: boolean): void {
+    $(this.root, '.cockpit').style.display = on ? '' : 'none';
+  }
+
+  showEnd(info: EndInfo, choose: (c: EndChoice) => void): void {
     this.firing = false;
     const e = $(this.root, '.end');
     e.style.display = '';
-    const saved = info.cargoSaved / Math.max(1, info.cargoTotal);
-    const stars = info.win ? 1 + (saved >= 1 ? 1 : 0) + (info.hullLeft >= 60 ? 1 : 0) : 0;
-    const reason = info.win ? 'Сектор очищен' : info.reason === 'hull' ? 'СВЯЗЬ ПОТЕРЯНА' : 'Весь груз утащили';
-    e.innerHTML = `<div class="card"><h2 class="${info.win ? 'win' : 'lose'}">${info.win ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ'}</h2>
-      <div>${reason}</div><div class="stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
-      <table><tr><td>Сбито</td><td><b>${info.kills}</b></td></tr>
-      <tr><td>Груз спасён</td><td><b>${info.cargoSaved}/${info.cargoTotal}</b></td></tr>
-      <tr><td>Корпус</td><td><b>${info.hullLeft}%</b></td></tr>
-      <tr><td>Точность</td><td><b>${info.accuracy}%</b></td></tr>
-      <tr><td>Кристаллы</td><td><b>◆ ${info.crystals}</b></td></tr></table>
-      <button class="again">Ещё раз</button></div>`;
-    $(e, '.again').onclick = onAgain;
+    const title = info.win ? 'СЕКТОР ОЧИЩЕН' : info.reason === 'hull' ? 'СВЯЗЬ ПОТЕРЯНА' : 'ГРУЗ УТАЩИЛИ';
+    const sub = info.win ? `Сектор ${info.sector} · ${info.sectorName}` : `Сектор ${info.sector} · дошёл до волны ${info.wave}/${info.waves}`;
+    const advice = info.win ? '' : info.reason === 'hull'
+      ? 'Мара: сбивай сгустки и искры раньше — и укрепи стекло в Ангаре.'
+      : 'Мара: сначала воры с грузом — их видно по лучу. Хваталке бей по руке.';
+    e.innerHTML = `<div class="card endcard"><h2 class="${info.win ? 'win' : 'lose'}">${title}</h2>
+      <div class="mute">${sub}</div>
+      <div class="stars">${'★'.repeat(info.stars)}<span class="off">${'★'.repeat(3 - info.stars)}</span></div>
+      <div class="endgrid">
+        <table><tr><td>Сбито</td><td><b>${info.kills}</b></td></tr>
+        <tr><td>Груз спасён</td><td><b>${info.cargoSaved}/${info.cargoTotal}</b></td></tr>
+        <tr><td>Корпус</td><td><b>${info.hullLeft}%</b></td></tr>
+        <tr><td>Точность</td><td><b>${info.accuracy}%</b></td></tr></table>
+        <div class="col"><div class="reward">◆ ${info.crystals + info.bonus}${info.bonus ? `<div class="small mute">из них бонус за сектор ${info.bonus}</div>` : ''}</div>
+        ${info.newEnemies.length ? `<button class="ghost" data-c="bestiary">Новые враги: ${info.newEnemies.join(', ')} ›</button>` : ''}</div>
+      </div>
+      ${advice ? `<div class="advice">${advice}</div>` : ''}
+      <div class="row">
+        ${info.canUpgrade ? '<button class="gold" data-c="hangar">Можно улучшить ›</button>' : '<button class="ghost" data-c="hangar">Ангар</button>'}
+        <span class="grow"></span><button class="ghost" data-c="retry">${info.win ? 'Повторить' : 'Ещё раз'}</button>
+        <button data-c="${info.win && info.hasNext ? 'next' : 'menu'}">${info.win && info.hasNext ? 'Дальше ›' : 'В меню'}</button>
+      </div></div>`;
+    for (const b of e.querySelectorAll<HTMLElement>('[data-c]')) b.onclick = () => choose(b.dataset.c as EndChoice);
+  }
+
+  hideEnd(): void {
+    $(this.root, '.end').style.display = 'none';
+    this.showPause(false);
   }
 }

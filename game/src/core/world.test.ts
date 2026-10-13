@@ -202,6 +202,22 @@ describe('прицел', () => {
   });
 });
 
+describe('прокачка', () => {
+  it('параметры зенитки и корпуса берутся из опций', () => {
+    const w = new World({
+      seed: 1, floorY: 0, player: CAM, portals: makePortals(CAM, 0, 3.5, 0, makeRng(1)), cargo: [v3(1, 0, 1)],
+      waves: SECTOR1, enemyDefs: ENEMIES, flak: { damage: 30 }, maxHull: 150,
+    });
+    expect(w.player.hull).toBe(150);
+    const e = w.spawn('scout', 0);
+    e.pos = v3(0, 1.4, 3);
+    w.update(0.01, { firing: true, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(e.dead).toBe(true);
+    expect(w.killsBy.scout).toBe(1);
+    expect(w.seen.has('scout')).toBe(true);
+  });
+});
+
 describe('баланс зенитки', () => {
   it('скаут умирает не более чем за 4 попадания', () => {
     expect(Math.ceil(ENEMIES.scout.hp / FLAK.damage)).toBeLessThanOrEqual(4);

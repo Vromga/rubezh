@@ -1,4 +1,5 @@
 import './style.css';
+import './screens.css';
 import * as THREE from 'three';
 import { makePortals } from './core/portals';
 import { makeRng } from './core/rng';
@@ -6,13 +7,15 @@ import type { GameEvent } from './core/types';
 import { World } from './core/world';
 import { v3, type V3 } from './core/vec';
 import { ENEMIES } from './data/enemies';
-import { SECTOR1 } from './data/sector1';
+import { SECTORS, UPGRADES } from './meta/catalog';
+import { applyBattle, computeStars, flakStats, loadSave, maxHull, nextCost, storeSave } from './meta/save';
+import { Screens, type ScreenName } from './ui/screens';
 import { Sfx } from './audio/sfx';
 import { buildCargo } from './render/meshes';
 import { GunRig } from './render/guns';
 import { Stage } from './render/stage';
 import { CrackLayer } from './ui/cracks';
-import { Hud, type Indicator } from './ui/hud';
+import { Hud, type EndChoice, type Indicator } from './ui/hud';
 
 const $ = (id: string) => document.getElementById(id)!;
 const MIN_CARGO = 3, MAX_CARGO = 5;
@@ -32,6 +35,24 @@ const ov = $('ov');
 const hud = new Hud($('hud'));
 const cracks = new CrackLayer($('cracks') as HTMLCanvasElement);
 const sfx = new Sfx();
+const screens = new Screens($('screens'), loadSave(), {
+  startAR: (n) => void startAR(n),
+  startDemo: (n) => startDemo(n),
+  onSettings: () => applySettings(),
+});
+let curSector = 1;
+let paused = false;
+let pendingScreen: { name: ScreenName; arg?: string | number } | null = null;
+let demoReady = false;
+let demoGrid: THREE.GridHelper | null = null;
+
+function applySettings(): void {
+  const st = screens.save.settings;
+  document.body.classList.toggle('lefty', st.lefty);
+  hud.setCockpit(st.cockpit);
+  cracks.strength = st.cracks;
+  sfx.setVolume(st.volume);
+}
 
 type Mode = 'ar' | 'demo';
 type Phase = 'menu' | 'prep' | 'battle' | 'end';
@@ -142,7 +163,8 @@ function toScreen(view: THREE.Camera, p: V3): { x: number; y: number; behind: bo
 }
 
 // ───── запуск ─────
-async function startAR(): Promise<void> {
+async function startAR(sector: number): Promise<void> {
+  curSector = sector;
   sfx.unlock();
   try {
     session = await navigator.xr!.requestSession('immersive-ar', {
@@ -151,7 +173,8 @@ async function startAR(): Promise<void> {
       domOverlay: { root: ov },
     } as XRSessionInit);
   } catch (e) {
-    $('status').textContent = `Не удалось запустить AR: ${String(e)}`;
+    screens.arStatus = `Не удалось запустить AR: ${String(e)}`;
+    screens.show();
     return;
   }
   mode = 'ar';
@@ -160,12 +183,12 @@ async function startAR(): Promise<void> {
   document.documentElement.style.background = 'transparent';
   renderer.setSize(innerWidth, innerHeight);
   document.body.appendChild(renderer.domElement);
-  $('menu').style.display = 'none';
+  screens.hide();
   ov.classList.add('on');
   await renderer.xr.setSession(session);
   const ref = await session.requestReferenceSpace('viewer');
   hitSource = (await session.requestHitTestSource!({ space: ref, entityTypes: ['plane', 'point'] })) ?? null;
-  session.addEventListener('end', () => location.reload());
+  session.addEventListener('end', () => onSessionEnd());
   session.addEventListener('select', () => {
     if (phase !== 'prep') return;
     if (reticle.visible) {
@@ -183,17 +206,25 @@ async function startAR(): Promise<void> {
   refreshPrep();
 }
 
-function startDemo(): void {
+function startDemo(sector: number): void {
+  curSector = sector;
   sfx.unlock();
   mode = 'demo';
   document.body.classList.add('demo');
-  $('menu').style.display = 'none';
+  screens.hide();
   document.body.appendChild(renderer.domElement);
   renderer.setSize(innerWidth, innerHeight);
   document.body.style.background = 'radial-gradient(ellipse at 50% 80%, #2b3a4d, #0a0e14 75%)';
-  const grid = new THREE.GridHelper(12, 24, 0x38e1ff, 0x1c4a5c);
-  scene.add(grid);
+  demoGrid = new THREE.GridHelper(12, 24, 0x38e1ff, 0x1c4a5c);
+  scene.add(demoGrid);
   ov.classList.add('on');
+  demoYaw = 0; demoPitch = 0;
+  const ring: [number, number][] = [[0, 2], [2, 0.6], [-2, 0.6], [1.3, -1.6], [-1.3, -1.6]];
+  for (const [x, z] of ring) addPrepCargo(v3(x, 0, z));
+  scene.add(prepLight);
+  startBattle();
+  if (demoReady) return;
+  demoReady = true;
   const cv = renderer.domElement;
   let drag: { x: number; y: number } | null = null;
   cv.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; });
@@ -211,10 +242,6 @@ function startDemo(): void {
     demoCam.aspect = innerWidth / innerHeight;
     demoCam.updateProjectionMatrix();
   });
-  const ring: [number, number][] = [[0, 2], [2, 0.6], [-2, 0.6], [1.3, -1.6], [-1.3, -1.6]];
-  for (const [x, z] of ring) addPrepCargo(v3(x, 0, z));
-  scene.add(prepLight);
-  startBattle();
 }
 
 function startBattle(): void {
@@ -226,9 +253,11 @@ function startBattle(): void {
   const yaw0 = Math.atan2(cam.dir.x, cam.dir.z);
   const seed = Date.now() & 0xffff;
   const portals = makePortals(v3(cam.pos.x, cam.pos.y, cam.pos.z), yaw0, radius, floorY, makeRng(seed));
+  const sec = SECTORS.find((x) => x.id === curSector)!;
   world = new World({
     seed, floorY, player: v3(cam.pos.x, cam.pos.y, cam.pos.z), cargo: cargoPos, portals,
-    waves: SECTOR1, enemyDefs: ENEMIES, front: yaw0,
+    waves: sec.waves!, enemyDefs: ENEMIES, front: yaw0,
+    flak: flakStats(screens.save), maxHull: maxHull(screens.save),
   });
   for (const c of prepCargo) scene.remove(c.obj);
   prepCargo.length = 0;
@@ -238,7 +267,12 @@ function startBattle(): void {
   scene.add(guns.group);
   cracks.reset();
   hud.hidePrep();
+  hud.hideEnd();
   hud.showBattle(true);
+  applySettings();
+  paused = false;
+  ended = false;
+  transient.length = 0;
   phase = 'battle';
   hud.say('Мара: порталы открываются со всех сторон. Следи за стрелками по краям.', 6000);
 }
@@ -267,10 +301,10 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
         nx = Math.min(0.9, Math.max(0.1, nx + (Math.random() - 0.5) * 0.08));
         ny = Math.min(0.9, Math.max(0.12, ny + (Math.random() - 0.5) * 0.08));
         cracks.hit(nx, ny, power);
-        cracks.setHull(ev.hull / 100);
+        cracks.setHull(ev.hull / w.player.maxHull);
         hud.damageFlash();
         sfx.glass(power);
-        navigator.vibrate?.(power > 0.8 ? [60, 30, 90] : 40);
+        if (screens.save.settings.vibration) navigator.vibrate?.(power > 0.8 ? [60, 30, 90] : 40);
         if (ev.hull <= 0) cracks.shatter();
         break;
       }
@@ -305,21 +339,106 @@ function finish(ev: Extract<GameEvent, { type: 'end' }>): void {
   const w = world!;
   const win = ev.result === 'win';
   if (win) sfx.win();
-  try {
-    const total = Number(localStorage.getItem('rubezh.crystals') ?? 0) + w.stats.crystals;
-    localStorage.setItem('rubezh.crystals', String(total));
-  } catch { /* хранилище может быть недоступно */ }
+  const save = screens.save;
+  const sec = SECTORS.find((x) => x.id === curSector)!;
+  const cargoSaved = w.cargo.filter((c) => c.state !== 'lost').length;
+  const stars = computeStars(win, cargoSaved, w.stats.cargoTotal, w.player.hull / w.player.maxHull);
+  const before = new Set(Object.keys(save.seen));
+  const res = applyBattle(save, {
+    sector: curSector, win, crystals: w.stats.crystals, stars,
+    wavesDone: win ? w.waveCount : Math.max(0, w.waveIdx), kills: w.killsBy, seen: [...w.seen],
+  });
+  storeSave(save);
+  const newEnemies = [...w.seen].filter((id) => !before.has(id)).map((id) => ENEMIES[id].name);
+  const canUpgrade = UPGRADES.some((u) => { const c = nextCost(save, u.key); return c !== null && c <= save.crystals; });
+  const next = SECTORS.find((x) => x.id === curSector + 1);
   setTimeout(() => {
     phase = 'end';
     hud.showBattle(false);
     hud.showEnd({
       win, reason: ev.reason, kills: w.stats.kills, crystals: w.stats.crystals,
       accuracy: w.stats.shots ? Math.round((w.stats.hits / w.stats.shots) * 100) : 0,
-      cargoSaved: w.cargo.filter((c) => c.state !== 'lost').length, cargoTotal: w.stats.cargoTotal,
-      hullLeft: Math.round(w.player.hull),
-    }, () => (session ? void session.end() : location.reload()));
+      cargoSaved, cargoTotal: w.stats.cargoTotal,
+      hullLeft: Math.round((w.player.hull / w.player.maxHull) * 100),
+      stars, bonus: res.bonus, sector: curSector, sectorName: sec.name,
+      wave: Math.max(1, w.waveIdx + 1), waves: w.waveCount,
+      newEnemies, canUpgrade, hasNext: !!(next && next.waves),
+    }, (c) => exitBattle(c));
   }, win ? 800 : 3000);
 }
+
+/** Выйти из боя на нужный экран. В AR сначала закрывается сессия. */
+function exitBattle(c: EndChoice | 'menu'): void {
+  const map: Record<string, { name: ScreenName; arg?: string | number }> = {
+    next: { name: 'briefing', arg: curSector + 1 },
+    retry: { name: 'briefing', arg: curSector },
+    hangar: { name: 'hangar' },
+    bestiary: { name: 'bestiary' },
+    menu: { name: 'menu' },
+  };
+  pendingScreen = map[c] ?? map.menu;
+  cleanupBattle();
+  if (session) void session.end();
+  else backToScreens();
+}
+
+function cleanupBattle(): void {
+  if (stage) scene.remove(stage.root);
+  scene.remove(guns.group, reticle, prepLight);
+  for (const c of prepCargo) scene.remove(c.obj);
+  prepCargo.length = 0;
+  if (demoGrid) { scene.remove(demoGrid); demoGrid = null; }
+  world = null;
+  stage = null;
+  paused = false;
+  spaceDown = false;
+  transient.length = 0;
+  lastHit = null;
+  reticle.visible = false;
+  hud.hideEnd();
+  hud.hidePrep();
+  hud.showBattle(false);
+  cracks.reset();
+  phase = 'menu';
+}
+
+function onSessionEnd(): void {
+  session = null;
+  hitSource = null;
+  cleanupBattle();
+  backToScreens();
+}
+
+function backToScreens(): void {
+  ov.classList.remove('on');
+  document.documentElement.classList.remove('ar');
+  document.body.classList.remove('demo');
+  document.body.style.background = '';
+  document.documentElement.style.background = '';
+  renderer.domElement.remove();
+  const p = pendingScreen ?? { name: 'menu' as ScreenName };
+  pendingScreen = null;
+  screens.show(p.name, p.arg);
+}
+
+hud.onPause = () => {
+  if (phase !== 'battle' || ended) return;
+  paused = true;
+  const w = world!;
+  hud.showPause(true, `Сектор ${curSector} · волна ${Math.max(1, w.waveIdx + 1)}/${w.waveCount} · корпус ${Math.round((w.player.hull / w.player.maxHull) * 100)}%`);
+};
+hud.onResume = () => { paused = false; hud.showPause(false); };
+hud.onQuit = () => {
+  // выход посреди боя: кристаллы за сбитых сохраняются
+  if (world && !ended) {
+    applyBattle(screens.save, {
+      sector: curSector, win: false, crystals: world.stats.crystals, stars: 0,
+      wavesDone: Math.max(0, world.waveIdx), kills: world.killsBy, seen: [...world.seen],
+    });
+    storeSave(screens.save);
+  }
+  exitBattle('menu');
+};
 
 // ───── главный цикл ─────
 function diag(): void {
@@ -349,7 +468,7 @@ renderer.setAnimationLoop((t, frame) => {
     refreshPrep();
   }
 
-  if (phase === 'battle' && world && stage) {
+  if (phase === 'battle' && world && stage && !paused) {
     const cam = getCam();
     const firing = hud.firing || spaceDown;
     guns.follow(cam.view);
@@ -392,29 +511,29 @@ renderer.setAnimationLoop((t, frame) => {
     }, dt * 1000);
   }
 
-  const cam = mode === 'ar' && renderer.xr.isPresenting ? null : demoCam;
-  renderer.render(scene, cam ?? demoCam);
+  if (phase === 'menu') return;
+  renderer.render(scene, demoCam);
 });
 
-// ───── меню ─────
-const status = $('status');
-const btnAr = $('btn-ar') as HTMLButtonElement;
-btnAr.onclick = () => void startAR();
-$('btn-demo').onclick = startDemo;
-
+// ───── экраны ─────
+applySettings();
+screens.show('menu');
 if (!navigator.xr) {
-  status.textContent = 'AR недоступен: нужен Chrome на Android по HTTPS. Можно проверить игру без камеры.';
+  screens.arStatus = 'AR недоступен: нужен Chrome на Android. Можно играть «Тест без камеры».';
+  screens.show();
 } else {
   navigator.xr.isSessionSupported('immersive-ar').then((ok) => {
-    status.textContent = ok ? 'AR готов. Встань посреди комнаты и держи телефон перед собой.' : 'AR не поддерживается (нужны «Google Play Services for AR»). Доступен тест без камеры.';
-    btnAr.hidden = !ok;
-  }).catch(() => { status.textContent = 'Не удалось проверить AR.'; });
+    screens.arOk = ok;
+    screens.arStatus = ok ? 'AR готов. Встань посреди комнаты.' : 'AR не поддерживается (нужны «Google Play Services for AR»). Доступен тест без камеры.';
+    screens.show();
+  }).catch(() => { screens.arStatus = 'Не удалось проверить AR.'; screens.show(); });
 }
 
 // для отладки и автотестов в браузере
 (window as unknown as { __rubezh: unknown }).__rubezh = {
   get world() { return world; },
-  startDemo,
+  startDemo: () => startDemo(1),
+  screens,
   /** отладка: навести демо-камеру на точку и держать огонь */
   aimAt(p: V3 | null) {
     spaceDown = p !== null;
