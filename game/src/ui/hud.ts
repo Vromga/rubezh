@@ -92,6 +92,9 @@ export class Hud {
 
   showBattle(on: boolean): void {
     for (const el of this.root.querySelectorAll<HTMLElement>('[data-b], .msg, .arrows')) el.style.display = on ? '' : 'none';
+    // слоты доп. оружия — только для взятого в бой
+    $(this.root, '.rocket').style.display = on && this.slots.rockets ? '' : 'none';
+    $(this.root, '.emp').style.display = on && this.slots.emp ? '' : 'none';
     if (!on) this.firing = false;
   }
 

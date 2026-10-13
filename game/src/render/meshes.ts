@@ -92,6 +92,52 @@ export function buildEnemy(def: EnemyDef): EnemyView {
       place(id, th);
     }
     view.anim = (t) => { arm.rotation.z = Math.sin(t * 2.2) * 0.12; };
+  } else if (def.id === 'shield') {
+    const body = new THREE.Group();
+    body.add(box(0.3, 0.26, 0.34, mat(METAL)));
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), mat(RED, RED, 2));
+    eye.position.set(0, 0.04, 0.17);
+    body.add(eye);
+    place('body', body);
+    const shieldMat = new THREE.MeshStandardMaterial({ color: 0x38e1ff, emissive: 0x1aa8ff, emissiveIntensity: 0.9, transparent: true, opacity: 0.45, side: THREE.DoubleSide, metalness: 0.1, roughness: 0.2 });
+    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 12, Math.PI * 0.2, Math.PI * 0.6, Math.PI * 0.2, Math.PI * 0.6), shieldMat);
+    sh.rotation.y = -Math.PI / 2;
+    sh.position.z = -0.12;
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.012, 6, 30), mat(0x9ff3ff, 0x38e1ff, 1.5, 0));
+    frame.position.z = 0.02;
+    const shield = new THREE.Group();
+    shield.add(sh, frame);
+    place('shield', shield);
+    const jet = new THREE.Group();
+    jet.add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.16, 10).rotateX(Math.PI / 2), mat(DARK)));
+    const fl = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 8).rotateX(-Math.PI / 2).translate(0, 0, -0.16), mat(0x66ccff, 0x33aaff, 2, 0));
+    jet.add(fl);
+    place('jet', jet);
+    view.anim = (t) => { shieldMat.opacity = 0.38 + Math.sin(t * 6) * 0.08; fl.scale.z = 0.8 + Math.sin(t * 30) * 0.2; };
+  } else if (def.id === 'bomber') {
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.32, 20, 10), mat(METAL));
+    body.scale.set(1, 0.32, 1);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.015, 6, 30).rotateX(Math.PI / 2), mat(0xffb03a, 0xff8800, 1.2, 0));
+    const g0 = new THREE.Group();
+    g0.add(body, ring);
+    place('body', g0);
+    const bay = new THREE.Group();
+    bay.add(box(0.2, 0.08, 0.2, mat(DARK)));
+    for (const x of [-0.05, 0.05]) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), mat(0xffb03a, 0xff6600, 1.5, 0));
+      m.position.set(x, -0.05, 0);
+      bay.add(m);
+    }
+    place('bay', bay);
+    place('eye', new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), mat(RED, RED, 2)));
+    for (const id of ['jetL', 'jetR']) {
+      const j = new THREE.Group();
+      j.add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.08, 10), mat(DARK)));
+      j.add(new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.14, 8).rotateX(Math.PI).translate(0, -0.1, 0), mat(0x66ccff, 0x33aaff, 2, 0)));
+      place(id, j);
+    }
+    view.anim = (t) => { ring.rotation.y = t * 2; };
+    view.charge = (k) => { for (const c of bay.children) if ((c as THREE.Mesh).geometry instanceof THREE.SphereGeometry) ((c as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = 1.5 + k * 4; };
   } else if (def.id === 'shooter') {
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), mat(METAL));
     body.scale.set(1, 0.8, 1);

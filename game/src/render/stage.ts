@@ -22,6 +22,9 @@ export class Stage {
   private boltGeo = new THREE.SphereGeometry(0.07, 10, 8);
   private boltMat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
   private rocketMeshes = new Map<number, THREE.Group>();
+  private mineMeshes = new Map<number, THREE.Mesh>();
+  private mineGeo = new THREE.SphereGeometry(0.06, 10, 8);
+  private mineMat = new THREE.MeshBasicMaterial({ color: 0xffa020 });
   private t = 0;
   private portalScale = 1;
 
@@ -191,6 +194,19 @@ export class Stage {
     }
     for (const [id, m] of this.boltMeshes) {
       if (!seen.has(id)) { this.root.remove(m); this.boltMeshes.delete(id); }
+    }
+
+    const mseen = new Set<number>();
+    for (const m of w.mines) {
+      mseen.add(m.id);
+      let mesh = this.mineMeshes.get(m.id);
+      if (!mesh) { mesh = new THREE.Mesh(this.mineGeo, this.mineMat); this.root.add(mesh); this.mineMeshes.set(m.id, mesh); }
+      mesh.position.set(m.pos.x, m.pos.y, m.pos.z);
+      mesh.scale.setScalar(1 + Math.sin(this.t * 20) * 0.25);
+      if (Math.random() < dt * 20) this.fx.sparks(mesh.position, 1, [1, 0.6, 0.1]);
+    }
+    for (const [id, mesh] of this.mineMeshes) {
+      if (!mseen.has(id)) { this.root.remove(mesh); this.mineMeshes.delete(id); }
     }
 
     const rseen = new Set<number>();

@@ -276,7 +276,7 @@ function startBattle(): void {
   ended = false;
   transient.length = 0;
   phase = 'battle';
-  hud.say('Мара: порталы открываются со всех сторон. Следи за стрелками по краям.', 6000);
+  hud.say('Мара: порталы откроются перед тобой. Стрелки по краям подскажут, откуда угроза.', 6000);
 }
 
 // ───── события боя → интерфейс ─────
@@ -329,6 +329,8 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
       case 'waveClear': hud.say('Волна отбита. Передышка.', 3000); break;
       case 'message': hud.say(ev.text, 6000); break;
       case 'lockOn': sfx.lock(); break;
+      case 'mineDropped': sfx.alarm(); hud.say('Мина! Сбей её в воздухе!', 1800); break;
+      case 'mineBlast': if (ev.destroyed) hud.say('Мина уничтожила груз!', 2500); break;
       case 'rocketFired': sfx.rocket(); break;
       case 'emp':
         sfx.emp();

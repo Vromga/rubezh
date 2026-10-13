@@ -1,6 +1,6 @@
 import { makeRng, type Rng } from './rng';
 import type {
-  Bolt, Cargo, Enemy, EnemyDef, GameEvent, PartState, Rocket, WaveDef,
+  Bolt, Cargo, Enemy, EnemyDef, GameEvent, Mine, PartState, Rocket, WaveDef,
 } from './types';
 import {
   add, clone, dist, distXZ, dot, mul, norm, raySphere, rotY, sub, v3, wrapAngle, type V3,
@@ -52,6 +52,7 @@ const BOLT_DAMAGE = 8;
 const SPARK_DAMAGE = 12;
 
 export const ROCKET = { lockTime: 0.6, speed0: 3, speed1: 8, turn: 5, damage: 45, splash: 1.3, splashDamage: 22, life: 5 };
+export const BOMB = { height: 1.6, period: 3.5, gravity: 3, blast: 0.6 };
 export const EMP = { stun: 3, cone: 0.75, range: 16 };
 
 interface Pending { at: number; enemy: string; portal: number; warned: boolean }
@@ -66,6 +67,7 @@ export class World {
   enemies: Enemy[] = [];
   bolts: Bolt[] = [];
   rockets: Rocket[] = [];
+  mines: Mine[] = [];
   /** состояние доп. оружия; null — не взято в бой */
   rocketState: { ammo: number; lockT: number; lockId: number | null; locked: boolean } | null = null;
   empState: { cd: number; cooldown: number } | null = null;
@@ -129,6 +131,7 @@ export class World {
     this.updateWaves(dt);
     for (const e of this.enemies) if (!e.dead) this.stepEnemy(e, dt);
     this.updateBolts(dt);
+    this.updateMines(dt);
     this.updateCargo(dt);
     this.enemies = this.enemies.filter((e) => !e.dead);
     this.checkEnd();
@@ -162,10 +165,11 @@ export class World {
   }
 
   /** Что окажется на линии огня (без разброса): для прицела и для выстрела. */
-  pick(origin: V3, d: V3): { enemy: Enemy | null; bolt: Bolt | null; t: number } | null {
+  pick(origin: V3, d: V3): { enemy: Enemy | null; bolt: Bolt | null; mine?: Mine | null; t: number } | null {
     let bestT = Infinity;
     let enemy: Enemy | null = null;
     let bolt: Bolt | null = null;
+    let mine: Mine | null = null;
     for (const e of this.enemies) {
       if (e.dead) continue;
       const t = raySphere(origin, d, e.pos, e.def.radius * (e.def.scale ?? 1) * this.flak.aimAssist);
@@ -175,7 +179,11 @@ export class World {
       const t = raySphere(origin, d, b.pos, 0.2);
       if (t !== null && t < bestT) { bestT = t; bolt = b; enemy = null; }
     }
-    return enemy || bolt ? { enemy, bolt, t: bestT } : null;
+    for (const m of this.mines) {
+      const t = raySphere(origin, d, m.pos, 0.2);
+      if (t !== null && t < bestT) { bestT = t; mine = m; bolt = null; enemy = null; }
+    }
+    return enemy || bolt || mine ? { enemy, bolt, mine, t: bestT } : null;
   }
 
   private shoot(origin: V3, dir0: V3): void {
@@ -187,6 +195,14 @@ export class World {
     const bestT = hit?.t ?? Infinity;
     const hitEnemy = hit?.enemy ?? null;
     const hitBolt = hit?.bolt ?? null;
+    const hitMine = hit?.mine ?? null;
+    if (hitMine) {
+      this.mines = this.mines.filter((m) => m !== hitMine);
+      this.events.push({ type: 'boltShot', pos: clone(hitMine.pos) });
+      this.events.push({ type: 'shot', origin: clone(origin), end: clone(hitMine.pos), hit: true });
+      this.stats.hits++;
+      return;
+    }
     if (hitBolt) {
       this.bolts = this.bolts.filter((b) => b !== hitBolt);
       this.events.push({ type: 'boltShot', pos: clone(hitBolt.pos) });
@@ -222,7 +238,19 @@ export class World {
     return best;
   }
 
-  private damage(e: Enemy, part: PartState, dmg: number, point: V3): void {
+  private damage(e: Enemy, part: PartState, dmg: number, point: V3, pierce = false): void {
+    // фронтальный щит принимает на себя всё, кроме ракет
+    const shield = e.parts.find((p) => p.def.kind === 'shield' && p.alive);
+    if (shield && !pierce) part = shield;
+    if (part.def.kind === 'shield') {
+      part.hp -= dmg;
+      this.events.push({ type: 'enemyHit', enemyId: e.id, partId: part.def.id, point, weak: false });
+      if (part.alive && part.hp <= 0) {
+        part.alive = false;
+        this.events.push({ type: 'partDestroyed', enemyId: e.id, partId: part.def.id, point: this.partWorld(e, part) });
+      }
+      return;
+    }
     const kind = part.def.kind;
     const mult = kind === 'sensor' ? 2 : kind === 'armor' ? 0.5 : 1;
     e.hp -= dmg * mult;
@@ -242,6 +270,7 @@ export class World {
       if (e.state === 'seek' || e.state === 'carry') e.state = 'flee';
     }
     if (part.def.kind === 'weapon' && e.def.behavior === 'shooter') e.state = 'attack';
+    if (part.def.kind === 'weapon' && e.def.behavior === 'bomber') e.state = 'flee';
   }
 
   private kill(e: Enemy, byPlayer: boolean): void {
@@ -323,7 +352,7 @@ export class World {
     if (e.stun > 0 && !e.falling) { e.stun -= dt; return; }
     if (e.state === 'emerge') {
       if (e.t >= 0.7) {
-        e.state = e.def.behavior === 'shooter' ? 'orbit' : e.def.behavior === 'kamikaze' ? 'attack' : 'seek';
+        e.state = e.def.behavior === 'shooter' ? 'orbit' : e.def.behavior === 'kamikaze' ? 'attack' : e.def.behavior === 'bomber' ? 'bomb' : 'seek';
       }
       return;
     }
@@ -345,6 +374,7 @@ export class World {
       case 'flee': this.stepFlee(e, speed, dt); break;
       case 'attack': this.stepAttack(e, speed, dt); break;
       case 'orbit': this.stepOrbit(e, speed, dt); break;
+      case 'bomb': this.stepBomb(e, speed, dt); break;
       default: break;
     }
   }
@@ -413,10 +443,11 @@ export class World {
   private stepAttack(e: Enemy, speed: number, dt: number): void {
     this.flyTo(e, this.player.pos, speed, dt, 0.5);
     if (dist(e.pos, this.player.pos) < 0.45) {
-      this.hurt(SPARK_DAMAGE, e.pos);
+      const dmg = e.def.contactDamage ?? SPARK_DAMAGE;
+      this.hurt(dmg, e.pos);
       e.dead = true;
       this.events.push({ type: 'enemyKilled', enemyId: e.id, pos: clone(e.pos), reward: 0, defId: e.def.id, byPlayer: false });
-      this.events.push({ type: 'explosion', pos: clone(e.pos), size: 0.8 });
+      this.events.push({ type: 'explosion', pos: clone(e.pos), size: dmg > 12 ? 1.2 : 0.8 });
     }
   }
 
@@ -437,6 +468,50 @@ export class World {
       const dir = norm(sub(p, e.pos));
       this.bolts.push({ id: this.nextId++, pos: clone(e.pos), vel: mul(dir, BOLT_SPEED), life: 5, from: clone(e.pos) });
       this.events.push({ type: 'boltFired', from: clone(e.pos) });
+    }
+  }
+
+  /** Бомбардир: зависает над грузом и сбрасывает мины. */
+  private stepBomb(e: Enemy, speed: number, dt: number): void {
+    let c = this.cargoOf(e.targetCargo);
+    if (!c || c.state !== 'idle') {
+      c = this.nearestIdleCargo(e.pos);
+      e.targetCargo = c ? c.id : null;
+    }
+    if (!c) { e.state = 'flee'; return; }
+    const over = v3(c.pos.x, c.pos.y + BOMB.height, c.pos.z);
+    this.flyTo(e, over, Math.min(speed, dist(e.pos, over) * 2 + 0.05), dt, 0.1);
+    if (distXZ(e.pos, over) > 0.4) return;
+    e.fireCd -= dt;
+    if (e.fireCd <= 0.7 && e.fireCd + dt > 0.7) this.events.push({ type: 'telegraph', enemyId: e.id, pos: clone(e.pos) });
+    if (e.fireCd <= 0) {
+      e.fireCd = BOMB.period;
+      const at = v3(e.pos.x, e.pos.y - 0.2, e.pos.z);
+      this.mines.push({ id: this.nextId++, pos: at, vy: 0 });
+      this.events.push({ type: 'mineDropped', pos: clone(at) });
+    }
+  }
+
+  private updateMines(dt: number): void {
+    for (const m of this.mines) {
+      m.vy -= BOMB.gravity * dt;
+      m.pos = v3(m.pos.x, m.pos.y + m.vy * dt, m.pos.z);
+    }
+    const landed = this.mines.filter((m) => m.pos.y <= this.floorY);
+    this.mines = this.mines.filter((m) => m.pos.y > this.floorY);
+    for (const m of landed) {
+      const at = v3(m.pos.x, this.floorY, m.pos.z);
+      let destroyed = 0;
+      for (const c of this.cargo) {
+        if (c.state === 'idle' && distXZ(c.pos, at) < BOMB.blast) {
+          c.state = 'lost';
+          this.stats.cargoLost++;
+          destroyed++;
+          this.events.push({ type: 'cargoLost', cargoId: c.id, pos: clone(c.pos) });
+        }
+      }
+      this.events.push({ type: 'explosion', pos: at, size: 0.7 });
+      this.events.push({ type: 'mineBlast', pos: at, destroyed });
     }
   }
 
@@ -530,11 +605,11 @@ export class World {
     this.events.push({ type: 'explosion', pos: clone(at), size: 1.1 });
     if (direct && !direct.dead) {
       const core = direct.parts.find((p) => p.def.kind === 'core') ?? direct.parts[0];
-      this.damage(direct, core, ROCKET.damage, at);
+      this.damage(direct, core, ROCKET.damage, at, true);
     }
     for (const e of this.enemies) {
       if (e.dead || e === direct) continue;
-      if (dist(e.pos, at) < ROCKET.splash) this.damage(e, this.nearestPart(e, at), ROCKET.splashDamage, at);
+      if (dist(e.pos, at) < ROCKET.splash) this.damage(e, this.nearestPart(e, at), ROCKET.splashDamage, at, true);
     }
   }
 
@@ -554,8 +629,9 @@ export class World {
       const d = Math.hypot(to.x, to.y, to.z);
       if (d < EMP.range && dot(norm(to), dir) > Math.cos(EMP.cone)) { e.stun = EMP.stun; n++; }
     }
-    for (const b of this.bolts) this.events.push({ type: 'boltShot', pos: clone(b.pos) });
+    for (const b of [...this.bolts, ...this.mines]) this.events.push({ type: 'boltShot', pos: clone(b.pos) });
     this.bolts = [];
+    this.mines = [];
     this.events.push({ type: 'emp', pos: clone(input.camPos), stunned: n });
   }
 

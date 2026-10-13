@@ -1,7 +1,7 @@
 import type { V3 } from './vec';
 
-export type PartKind = 'core' | 'armor' | 'engine' | 'weapon' | 'grabber' | 'sensor';
-export type Behavior = 'thief' | 'kamikaze' | 'shooter';
+export type PartKind = 'core' | 'armor' | 'engine' | 'weapon' | 'grabber' | 'sensor' | 'shield';
+export type Behavior = 'thief' | 'kamikaze' | 'shooter' | 'bomber';
 
 export interface PartDef { id: string; kind: PartKind; hp: number; off: V3; r: number }
 
@@ -16,13 +16,15 @@ export interface EnemyDef {
   behavior: Behavior;
   reward: number;
   parts: PartDef[];
+  /** урон при таране (камикадзе) */
+  contactDamage?: number;
   /** Масштаб модели и зон попадания (1 — как в описании частей). */
   scale?: number;
 }
 
 export interface PartState { def: PartDef; hp: number; alive: boolean }
 
-export type EnemyState = 'emerge' | 'seek' | 'carry' | 'flee' | 'orbit' | 'attack';
+export type EnemyState = 'emerge' | 'seek' | 'carry' | 'flee' | 'orbit' | 'attack' | 'bomb';
 
 export interface Enemy {
   id: number;
@@ -55,6 +57,8 @@ export interface Cargo {
 
 export interface Rocket { id: number; pos: V3; vel: V3; target: number | null; life: number }
 
+export interface Mine { id: number; pos: V3; vy: number }
+
 export interface Bolt { id: number; pos: V3; vel: V3; life: number; from: V3 }
 
 export interface SpawnDef { t: number; enemy: string; portal?: number }
@@ -81,6 +85,8 @@ export type GameEvent =
   | { type: 'overheat' }
   | { type: 'cooled' }
   | { type: 'lockOn'; enemyId: number }
+  | { type: 'mineDropped'; pos: V3 }
+  | { type: 'mineBlast'; pos: V3; destroyed: number }
   | { type: 'rocketFired'; from: V3 }
   | { type: 'emp'; pos: V3; stunned: number }
   | { type: 'end'; result: 'win' | 'lose'; reason: 'hull' | 'cargo' | 'waves' };

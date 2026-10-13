@@ -31,6 +31,24 @@ export const ENEMIES: Record<string, EnemyDef> = {
       { id: 'thrR', kind: 'engine', hp: 16, off: v3(0.28, 0, -0.05), r: 0.12 },
     ],
   },
+  shield: {
+    id: 'shield', name: 'Щитоносец', cls: 'M', hp: 60, speed: 0.45, radius: 0.42, behavior: 'kamikaze', reward: 16, scale: S, contactDamage: 22,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.2 },
+      { id: 'shield', kind: 'shield', hp: 120, off: v3(0, 0, 0.3), r: 0.36 },
+      { id: 'jet', kind: 'engine', hp: 30, off: v3(0, -0.05, -0.25), r: 0.12 },
+    ],
+  },
+  bomber: {
+    id: 'bomber', name: 'Бомбардир', cls: 'M', hp: 55, speed: 0.6, radius: 0.45, behavior: 'bomber', reward: 15, scale: S,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.25 },
+      { id: 'bay', kind: 'weapon', hp: 20, off: v3(0, -0.12, 0), r: 0.14 },
+      { id: 'eye', kind: 'sensor', hp: 10, off: v3(0, 0.02, 0.32), r: 0.1 },
+      { id: 'jetL', kind: 'engine', hp: 15, off: v3(-0.36, 0, 0), r: 0.11 },
+      { id: 'jetR', kind: 'engine', hp: 15, off: v3(0.36, 0, 0), r: 0.11 },
+    ],
+  },
   shooter: {
     id: 'shooter', name: 'Стрелок', cls: 'M', hp: 50, speed: 0.7, radius: 0.38, behavior: 'shooter', reward: 14, scale: S,
     parts: [

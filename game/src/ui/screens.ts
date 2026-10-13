@@ -20,7 +20,7 @@ const MARA_LINES = [
   'Ангар открыт. Улучшения не помешают.',
 ];
 
-const ICON_IDS: Record<string, string> = { scout: 'e-scout', spark: 'e-spark', grabber: 'e-grabber', shooter: 'e-shooter' };
+const ICON_IDS: Record<string, string> = { scout: 'e-scout', spark: 'e-spark', grabber: 'e-grabber', shooter: 'e-shooter', shield: 'e-shield', bomber: 'e-bomber' };
 const icon = (id: string | undefined, cls = 'eicon') => `<svg class="${cls}" viewBox="0 0 60 40"><use href="#${id ? ICON_IDS[id] ?? 'e-unknown' : 'e-unknown'}"/></svg>`;
 const wIcon = (w: { id: string; icon: string }) => (w.id === 'rockets'
   ? '<svg class="wicon" viewBox="0 0 24 24"><use href="#w-rocket"/></svg>'

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENEMIES } from '../data/enemies';
 import { SECTOR1 } from '../data/sector1';
+import { SECTOR2 } from '../data/sector2';
 import { makePortals } from './portals';
 import { makeRng } from './rng';
 import { FLAK, World } from './world';
@@ -165,6 +166,17 @@ describe('волны', () => {
     expect(w.waveIdx).toBe(SECTOR1.length - 1);
   });
 
+  it('сектор 2 проходим при точной стрельбе (мины и щиты учтены)', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8), v3(1.5, 0, -1), v3(-1.5, 0, -1)], waves: SECTOR2 });
+    run(w, 900, (x) => {
+      const m = x.mines[0];
+      if (m) return v3(m.pos.x, m.pos.y, m.pos.z);
+      const t = x.enemies.find((e) => e.state !== 'emerge');
+      return t ? v3(t.pos.x, t.pos.y, t.pos.z) : null;
+    }, () => w.result !== null);
+    expect(w.result).toBe('win');
+  });
+
   it('без стрельбы игра проигрывается', () => {
     const w = make();
     run(w, 300, () => null, () => w.result !== null);
@@ -267,6 +279,62 @@ describe('ЭМИ', () => {
     for (let i = 0; i < 20; i++) w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), emp: true });
     expect(front.pos).toEqual(before);
     expect(w.empState!.cd).toBeGreaterThan(8);
+  });
+});
+
+describe('щитоносец', () => {
+  it('щит держит зенитку, ракета пробивает', () => {
+    const w = new World({
+      seed: 1, floorY: 0, player: CAM, portals: makePortals(CAM, 0, 3.5, 0, makeRng(1)), cargo: [v3(1, 0, 1)],
+      waves: SECTOR1, enemyDefs: ENEMIES, weapons: { rockets: { ammo: 1 } },
+    });
+    const e = w.spawn('shield', 0);
+    e.pos = v3(0, 1.4, 5);
+    e.yaw = Math.PI;
+    e.state = 'emerge';
+    for (let i = 0; i < 10; i++) w.update(0.05, { firing: true, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(e.hp).toBe(e.def.hp);
+    const sh = e.parts.find((p) => p.def.kind === 'shield')!;
+    expect(sh.hp).toBeLessThan(120);
+    for (let i = 0; i < 14; i++) w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), rocket: true });
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), rocket: false });
+    for (let i = 0; i < 40 && w.rockets.length; i++) w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(e.hp).toBeLessThan(e.def.hp);
+  });
+
+  it('таран щитоносца бьёт сильнее искры', () => {
+    const w = make();
+    const e = w.spawn('shield', 0);
+    e.state = 'attack';
+    e.pos = v3(0, 1.4, 0.3);
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(w.player.hull).toBe(100 - 22);
+  });
+});
+
+describe('бомбардир', () => {
+  it('сбрасывает мину, мина у груза уничтожает его', () => {
+    const w = make({ cargo: [v3(1, 0, 2), v3(-1.5, 0, 2)] });
+    const e = w.spawn('bomber', 0);
+    e.pos = v3(1, 1.6, 2);
+    e.state = 'bomb';
+    e.fireCd = 0.05;
+    let dropped = false;
+    for (let i = 0; i < 60; i++) {
+      w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+      if (w.drain().some((x) => x.type === 'mineDropped')) dropped = true;
+      if (w.cargo[0].state === 'lost') break;
+    }
+    expect(dropped).toBe(true);
+    expect(w.cargo[0].state).toBe('lost');
+    expect(w.cargo[1].state).toBe('idle');
+  });
+
+  it('мину можно сбить в воздухе', () => {
+    const w = make();
+    w.mines.push({ id: 5, pos: v3(0, 1.4, 3), vy: 0 });
+    w.update(0.01, { firing: true, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(w.mines).toHaveLength(0);
   });
 });
 
