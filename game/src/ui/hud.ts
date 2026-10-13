@@ -103,7 +103,7 @@ export class Hud {
     const p = $(this.root, '.panel');
     p.style.display = '';
     p.innerHTML = `<p>${opts.floorFound
-      ? `Коснись пола перед собой, чтобы поставить груз (${opts.min}–${opts.max}). Поставлено: <b>${opts.count}</b>`
+      ? `Фиолетовый веер — сектор порталов. Ставь груз в нём, касаясь пола (${opts.min}–${opts.max}). Поставлено: <b>${opts.count}</b>`
       : 'Наведи камеру на пол в 1–2 м и слегка поводи. Не нашёл? Коснись экрана или нажми «Авто» — поставлю на глаз.'}</p>
       <div class="row"><button class="ghost auto">Авто</button><button class="go" ${opts.count < opts.min ? 'disabled' : ''}>В БОЙ</button></div>`;
     $(p, '.auto').onclick = opts.onAuto;

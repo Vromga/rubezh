@@ -80,6 +80,23 @@ const reticle = new THREE.Mesh(
 reticle.matrixAutoUpdate = false;
 reticle.visible = false;
 const prepLight = new THREE.HemisphereLight(0xffffff, 0x445066, 2.2);
+/** Веер 60° на полу: сектор, где откроются порталы, — груз ставят перед собой. */
+const FAN_ARC = Math.PI / 3;
+const fan = new THREE.Group();
+{
+  const fill = new THREE.Mesh(
+    new THREE.CircleGeometry(3, 32, -Math.PI / 2 - FAN_ARC / 2, FAN_ARC).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xb36bff, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  const edge = new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints([0, 1].flatMap((i) => {
+      const a = (i ? 1 : -1) * FAN_ARC / 2;
+      return [new THREE.Vector3(0, 0, 0), new THREE.Vector3(Math.sin(a) * 3, 0, Math.cos(a) * 3)];
+    })),
+    new THREE.LineBasicMaterial({ color: 0xd59bff, transparent: true, opacity: 0.8 }),
+  );
+  fan.add(fill, edge);
+}
 const prepCargo: { pos: V3; obj: THREE.Group }[] = [];
 let lastHit: V3 | null = null;
 let prepShown = '';
@@ -200,7 +217,7 @@ async function startAR(sector: number): Promise<void> {
       if (p) addPrepCargo(p);
     }
   });
-  scene.add(reticle, prepLight);
+  scene.add(reticle, prepLight, fan);
   hud.showBattle(false);
   phase = 'prep';
   prepShown = '';
@@ -263,7 +280,7 @@ function startBattle(): void {
   hud.setSlots({ rockets: !!world.rocketState, emp: !!world.empState });
   for (const c of prepCargo) scene.remove(c.obj);
   prepCargo.length = 0;
-  scene.remove(reticle, prepLight);
+  scene.remove(reticle, prepLight, fan);
   stage = new Stage(world);
   scene.add(stage.root);
   scene.add(guns.group);
@@ -395,7 +412,7 @@ function exitBattle(c: EndChoice | 'menu'): void {
 
 function cleanupBattle(): void {
   if (stage) scene.remove(stage.root);
-  scene.remove(guns.group, reticle, prepLight);
+  scene.remove(guns.group, reticle, prepLight, fan);
   for (const c of prepCargo) scene.remove(c.obj);
   prepCargo.length = 0;
   if (demoGrid) { scene.remove(demoGrid); demoGrid = null; }
@@ -477,6 +494,11 @@ renderer.setAnimationLoop((t, frame) => {
       } else reticle.visible = false;
     } else reticle.visible = false;
     refreshPrep();
+    // веер следует за направлением взгляда, лежит на полу
+    const c = getCam();
+    const floorY = lastHit ? lastHit.y : c.pos.y - EYE_ABOVE_FLOOR;
+    fan.position.set(c.pos.x, floorY + 0.01, c.pos.z);
+    fan.rotation.y = Math.atan2(c.dir.x, c.dir.z);
   }
 
   if (phase === 'battle' && world && stage && !paused) {
@@ -542,7 +564,7 @@ renderer.setAnimationLoop((t, frame) => {
 
 // ───── экраны ─────
 applySettings();
-screens.show('menu');
+screens.show('splash');
 if (!navigator.xr) {
   screens.arStatus = 'AR недоступен: нужен Chrome на Android. Можно играть «Тест без камеры».';
   screens.show();

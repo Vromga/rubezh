@@ -4,7 +4,7 @@ import {
   buyUpgrade, buyWeapon, defaultSave, level, nextCost, storeSave, upgradeValue, type SaveData,
 } from '../meta/save';
 
-export type ScreenName = 'menu' | 'campaign' | 'briefing' | 'arsenal' | 'hangar' | 'bestiary' | 'settings';
+export type ScreenName = 'splash' | 'menu' | 'campaign' | 'briefing' | 'arsenal' | 'hangar' | 'bestiary' | 'settings';
 
 export interface ScreenHooks {
   startAR(sector: number): void;
@@ -69,6 +69,7 @@ export class Screens {
 
   private render(): string {
     switch (this.cur) {
+      case 'splash': return this.splash();
       case 'menu': return this.menu();
       case 'campaign': return this.campaign();
       case 'briefing': return this.briefing();
@@ -77,6 +78,17 @@ export class Screens {
       case 'bestiary': return this.bestiary();
       case 'settings': return this.settings();
     }
+  }
+
+  private splash(): string {
+    setTimeout(() => { if (this.cur === 'splash') this.show('menu'); }, 2600);
+    return `<div class="splash" data-go="menu">
+      <svg class="splash-crack" viewBox="0 0 200 90" preserveAspectRatio="none"><g stroke="#fff" stroke-width=".35" fill="none" opacity=".85"><path d="M100 45 L88 30 L80 12 M100 45 L118 36 L140 30 L160 18 M100 45 L110 60 L108 80 M100 45 L82 52 L60 58 L40 70 M100 45 L96 62 L88 75"/><path d="M92 38 L108 40 L106 52 L94 51Z" stroke-width=".2"/></g></svg>
+      <div class="splash-glow"></div>
+      <svg class="splash-bug" viewBox="0 0 60 40"><use href="#e-scout"/></svg>
+      <div class="logo splash-logo">ПОСЛЕДНИЙ РУБЕЖ</div>
+      <div class="mute splash-tap">коснись, чтобы продолжить</div>
+    </div>`;
   }
 
   private menu(): string {
