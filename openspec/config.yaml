@@ -1,0 +1,24 @@
+schema: spec-driven
+
+context: |
+  Language: ru
+  All artifacts must be written in ru.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+  ## Продукт
+  «Последний Рубеж» — AR-шутер для телефона и планшета. Камера показывает настоящую комнату,
+  гироскоп поворачивает «прицел»; из порталов (разломов) на нас летят инопланетные роботы и корабли,
+  чтобы украсть ценный груз (колонистов, кристаллы), стоящий на полу. Игрок — неподвижная
+  «мобильная точка» с зениткой и дополнительным оружием (ракеты и др.).
+  Попадания видны на врагах (части ломаются, дым, огонь); попадания во врага по игроку
+  бьют «стекло» экрана — появляются трещины.
+
+  ## Стек (решение, см. changes/design-ar-defense/design.md)
+  TypeScript, Vite, three.js + WebXR (immersive-ar, hit-test, DOM Overlay) в Chrome на Android
+  через ARCore; запасной режим — DeviceOrientation. Web Audio, PWA. Только Android (Xiaomi 14
+  как эталон), распространение ссылкой/PWA, при желании APK через Bubblewrap/Capacitor.
+
+  ## Границы MVP
+  - Русский язык, альбомная ориентация, Android (телефон и планшет).
+  - 6DoF через WebXR/ARCore: пол находит ARCore (hit-test), груз ставится на реальный пол.
+  - Без аккаунтов, без рекламы, без сети.
