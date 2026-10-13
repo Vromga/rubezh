@@ -16,6 +16,8 @@ export interface WorldOptions {
   portals: V3[];
   waves: WaveDef[];
   enemyDefs: Record<string, EnemyDef>;
+  /** Направление «вперёд» (рад., как atan2(x, z)): стрелки держатся в переднем полукруге. */
+  front?: number;
 }
 
 /** Параметры зенитки (позже станут уровнями прокачки). */
@@ -30,7 +32,7 @@ export const FLAK = {
 };
 
 const HULL = 100;
-const BOLT_SPEED = 3.2;
+const BOLT_SPEED = 1.6;
 const BOLT_DAMAGE = 8;
 const SPARK_DAMAGE = 12;
 
@@ -57,6 +59,7 @@ export class World {
   private phaseT = 2;
   private waves: WaveDef[];
   private defs: Record<string, EnemyDef>;
+  private front: number;
 
   constructor(o: WorldOptions) {
     this.rng = makeRng(o.seed);
@@ -65,6 +68,7 @@ export class World {
     this.portals = o.portals;
     this.waves = o.waves;
     this.defs = o.enemyDefs;
+    this.front = o.front ?? 0;
     o.cargo.forEach((p, i) => this.cargo.push({
       id: i + 1, kind: i % 2 === 0 ? 'colonist' : 'crystal', pos: clone(p), state: 'idle', vy: 0,
     }));
@@ -370,8 +374,10 @@ export class World {
 
   private stepOrbit(e: Enemy, speed: number, dt: number): void {
     const p = this.player.pos;
-    e.orbitAng += 0.35 * dt;
-    const want = v3(p.x + Math.sin(e.orbitAng) * 2.4, p.y + 0.3 + Math.sin(e.t) * 0.2, p.z + Math.cos(e.orbitAng) * 2.4);
+    e.orbitAng += 0.25 * dt;
+    // покачивается дугой ±70° перед игроком, а не кружит вокруг него
+    const a = this.front + Math.sin(e.orbitAng) * 1.2;
+    const want = v3(p.x + Math.sin(a) * 2.4, p.y + 0.3 + Math.sin(e.t) * 0.2, p.z + Math.cos(a) * 2.4);
     this.flyTo(e, want, Math.min(speed, dist(e.pos, want) * 2 + 0.05), dt, 0);
     e.yaw += wrapAngle(Math.atan2(p.x - e.pos.x, p.z - e.pos.z) - e.yaw) * Math.min(1, dt * 4);
     e.fireCd -= dt;
@@ -379,7 +385,7 @@ export class World {
       this.events.push({ type: 'telegraph', enemyId: e.id, pos: clone(e.pos) });
     }
     if (e.fireCd <= 0) {
-      e.fireCd = 3;
+      e.fireCd = 4;
       const dir = norm(sub(p, e.pos));
       this.bolts.push({ id: this.nextId++, pos: clone(e.pos), vel: mul(dir, BOLT_SPEED), life: 5, from: clone(e.pos) });
       this.events.push({ type: 'boltFired', from: clone(e.pos) });

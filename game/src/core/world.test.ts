@@ -29,6 +29,18 @@ function run(w: World, seconds: number, aim: (w: World) => V3 | null = () => nul
 }
 
 describe('порталы', () => {
+  it('порталы только в переднем полукруге (180°)', () => {
+    for (const yaw of [0, 1, -2.5]) {
+      for (const q of makePortals(CAM, yaw, 3.5, 0, makeRng(5))) {
+        const a = Math.atan2(q.x - CAM.x, q.z - CAM.z);
+        let d = a - yaw;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        expect(Math.abs(d)).toBeLessThanOrEqual(Math.PI / 2);
+      }
+    }
+  });
+
   it('создаёт 6 порталов на заданном радиусе', () => {
     const p = makePortals(CAM, 0, 3.5, 0, makeRng(3));
     expect(p).toHaveLength(6);
@@ -157,6 +169,26 @@ describe('волны', () => {
     const w = make();
     run(w, 300, () => null, () => w.result !== null);
     expect(w.result).toBe('lose');
+  });
+});
+
+describe('стрелок', () => {
+  it('остаётся в переднем полукруге и не заходит за спину', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, 2)] });
+    const e = w.spawn('shooter', 0);
+    e.state = 'orbit';
+    for (let i = 0; i < 30 * 60; i++) {
+      w.update(1 / 30, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+      if (w.result) break;
+      expect(e.pos.z).toBeGreaterThan(-0.5);
+    }
+  });
+});
+
+describe('скорость врагов', () => {
+  it('скаут облетает комнату неспешно (< 1,2 м/с)', () => {
+    expect(ENEMIES.scout.speed).toBeLessThan(1.2);
+    expect(ENEMIES.spark.speed).toBeLessThan(1.4);
   });
 });
 

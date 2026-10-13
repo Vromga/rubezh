@@ -198,7 +198,7 @@ function startBattle(): void {
   const portals = makePortals(v3(cam.pos.x, cam.pos.y, cam.pos.z), yaw0, radius, floorY, makeRng(seed));
   world = new World({
     seed, floorY, player: v3(cam.pos.x, cam.pos.y, cam.pos.z), cargo: cargoPos, portals,
-    waves: SECTOR1, enemyDefs: ENEMIES,
+    waves: SECTOR1, enemyDefs: ENEMIES, front: yaw0,
   });
   for (const c of prepCargo) scene.remove(c.obj);
   prepCargo.length = 0;
