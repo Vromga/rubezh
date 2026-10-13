@@ -43,6 +43,10 @@ let stage: Stage | null = null;
 let last = 0;
 let demoYaw = 0, demoPitch = 0;
 let spaceDown = false;
+let frames = 0, lastErr = '', hitCount = 0;
+const DEBUG = new URLSearchParams(location.search).has('debug');
+addEventListener('error', (e) => { lastErr = String(e.message); });
+addEventListener('unhandledrejection', (e) => { lastErr = String(e.reason); });
 
 // ───── подготовка комнаты (AR) ─────
 const reticle = new THREE.Mesh(
@@ -118,7 +122,7 @@ async function startAR(): Promise<void> {
   try {
     session = await navigator.xr!.requestSession('immersive-ar', {
       requiredFeatures: ['hit-test'],
-      optionalFeatures: ['dom-overlay'],
+      optionalFeatures: ['dom-overlay', 'local-floor'],
       domOverlay: { root: ov },
     } as XRSessionInit);
   } catch (e) {
@@ -126,8 +130,10 @@ async function startAR(): Promise<void> {
     return;
   }
   mode = 'ar';
+  document.documentElement.classList.add('ar');
   document.body.style.background = 'transparent';
   document.documentElement.style.background = 'transparent';
+  renderer.setSize(innerWidth, innerHeight);
   document.body.appendChild(renderer.domElement);
   $('menu').style.display = 'none';
   ov.classList.add('on');
@@ -150,6 +156,7 @@ async function startAR(): Promise<void> {
 function startDemo(): void {
   sfx.unlock();
   mode = 'demo';
+  document.body.classList.add('demo');
   $('menu').style.display = 'none';
   document.body.appendChild(renderer.domElement);
   renderer.setSize(innerWidth, innerHeight);
@@ -287,13 +294,22 @@ function finish(ev: Extract<GameEvent, { type: 'end' }>): void {
 }
 
 // ───── главный цикл ─────
+function diag(): void {
+  const el = $('diag');
+  if (mode !== 'ar' || (phase === 'battle' && !DEBUG && !lastErr)) { el.textContent = ''; return; }
+  el.textContent = `AR кадров:${frames} hit:${hitCount} blend:${session?.environmentBlendMode ?? '-'} overlay:${session?.domOverlayState?.type ?? 'нет'}${lastErr ? ` ОШИБКА:${lastErr}` : ''}`;
+}
+
 renderer.setAnimationLoop((t, frame) => {
+  if (frame) frames++;
+  if (frames % 15 === 0) diag();
   const dt = Math.min(0.05, last ? (t - last) / 1000 : 0.016);
   last = t;
 
   if (phase === 'prep' && frame && hitSource) {
     const hits = frame.getHitTestResults(hitSource);
     if (hits.length) {
+      hitCount++;
       const pose = hits[0].getPose(renderer.xr.getReferenceSpace()!);
       if (pose) {
         reticle.visible = true;

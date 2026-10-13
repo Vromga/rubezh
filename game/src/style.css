@@ -1,7 +1,7 @@
 :root { --c: #38e1ff; --warn: #ff4a3a; --ok: #5dffa0; --bg: #0a0e14; font-family: system-ui, sans-serif; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; touch-action: none; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: #eaf6ff; overflow: hidden; }
-canvas#gl, body > canvas:not(#cracks) { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+body.demo > canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 
 #menu { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center;
   background: radial-gradient(ellipse at 50% 30%, #14304a, var(--bg) 70%); padding: 16px; }
@@ -15,7 +15,7 @@ button:disabled { opacity: .35; }
 
 #ov { display: none; position: fixed; inset: 0; z-index: 10; pointer-events: none; }
 #ov.on { display: block; }
-#cracks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: drop-shadow(0 0 2px #fff6); }
+#cracks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 #cracks.shatter { animation: shatter 2.4s ease-in forwards; animation-delay: .5s; }
 @keyframes shatter { to { transform: translateY(40vh) rotate(3deg); opacity: 0; } }
 #hud { position: absolute; inset: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
@@ -23,7 +23,7 @@ button:disabled { opacity: .35; }
 #hud .tap { pointer-events: auto; }
 
 .top { top: 8px; left: 8px; right: 8px; display: flex; gap: 12px; align-items: center; font-size: 14px; text-shadow: 0 1px 3px #000; }
-.top .pill { background: #0009; padding: 5px 10px; border-radius: 10px; backdrop-filter: blur(4px); white-space: nowrap; }
+.top .pill { background: #0009; padding: 5px 10px; border-radius: 10px; white-space: nowrap; }
 .bar { flex: 1; height: 12px; background: #0009; border-radius: 8px; overflow: hidden; max-width: 260px; border: 1px solid #fff3; }
 .bar > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--ok), #c8ff5d); transition: width .15s; }
 .bar.low > i { background: linear-gradient(90deg, var(--warn), #ff9a3a); }
@@ -74,3 +74,8 @@ body.lefty .heat { left: auto; right: 20px; }
 .ic.colonist { border-radius: 50%; background: #9fe8ff; box-shadow: 0 0 6px #38e1ff; }
 .ic.crystal { background: #5dffa0; transform: rotate(45deg) scale(.8); box-shadow: 0 0 6px #5dffa0; }
 .ic.lost { opacity: .25; filter: grayscale(1); box-shadow: none; }
+
+/* AR: страница прозрачна, без эффектов, которые могут сделать слой непрозрачным */
+html.ar, html.ar body { background: transparent !important; }
+html.ar * { backdrop-filter: none !important; }
+#diag { position: absolute; left: 8px; bottom: 4px; font: 11px monospace; opacity: .7; color: #cfe; text-shadow: 0 1px 2px #000; pointer-events: none; max-width: 60vw; }
