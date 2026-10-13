@@ -93,6 +93,15 @@ export function flakStats(s: SaveData) {
   };
 }
 
+/** Доп. оружие, взятое в бой: только купленное, готовое и стоящее в слотах. */
+export function weaponOpts(s: SaveData): { rockets?: { ammo: number }; emp?: { cooldown: number } } {
+  const inSlots = (id: string) => s.loadout.includes(id) && s.owned.includes(id) && !!WEAPONS.find((w) => w.id === id && w.ready);
+  return {
+    ...(inSlots('rockets') ? { rockets: { ammo: upgradeValue(s, 'rockets.ammo') } } : {}),
+    ...(inSlots('emp') ? { emp: { cooldown: upgradeValue(s, 'emp.cooldown') } } : {}),
+  };
+}
+
 export function maxHull(s: SaveData): number { return upgradeValue(s, 'hull.armor'); }
 
 export function computeStars(win: boolean, cargoSaved: number, cargoTotal: number, hullFrac: number): number {

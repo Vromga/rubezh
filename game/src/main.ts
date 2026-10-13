@@ -8,7 +8,7 @@ import { World } from './core/world';
 import { v3, type V3 } from './core/vec';
 import { ENEMIES } from './data/enemies';
 import { SECTORS, UPGRADES } from './meta/catalog';
-import { applyBattle, computeStars, flakStats, loadSave, maxHull, nextCost, storeSave } from './meta/save';
+import { applyBattle, computeStars, flakStats, loadSave, maxHull, nextCost, storeSave, weaponOpts } from './meta/save';
 import { Screens, type ScreenName } from './ui/screens';
 import { Sfx } from './audio/sfx';
 import { buildCargo } from './render/meshes';
@@ -66,6 +66,7 @@ const guns = new GunRig();
 let last = 0;
 let demoYaw = 0, demoPitch = 0;
 let spaceDown = false;
+let keyRocket = false, keyEmp = false;
 let frames = 0, lastErr = '', hitCount = 0;
 const DEBUG = new URLSearchParams(location.search).has('debug');
 addEventListener('error', (e) => { lastErr = String(e.message); });
@@ -235,8 +236,8 @@ function startDemo(sector: number): void {
     demoPitch = Math.max(-1.2, Math.min(1.2, demoPitch - (e.clientY - drag.y) * 0.006));
     drag = { x: e.clientX, y: e.clientY };
   });
-  addEventListener('keydown', (e) => { if (e.code === 'Space') spaceDown = true; });
-  addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; });
+  addEventListener('keydown', (e) => { if (e.code === 'Space') spaceDown = true; if (e.code === 'KeyR') keyRocket = true; if (e.code === 'KeyE') keyEmp = true; });
+  addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; if (e.code === 'KeyR') keyRocket = false; });
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
     demoCam.aspect = innerWidth / innerHeight;
@@ -257,8 +258,9 @@ function startBattle(): void {
   world = new World({
     seed, floorY, player: v3(cam.pos.x, cam.pos.y, cam.pos.z), cargo: cargoPos, portals,
     waves: sec.waves!, enemyDefs: ENEMIES, front: yaw0,
-    flak: flakStats(screens.save), maxHull: maxHull(screens.save),
+    flak: flakStats(screens.save), maxHull: maxHull(screens.save), weapons: weaponOpts(screens.save),
   });
+  hud.setSlots({ rockets: !!world.rocketState, emp: !!world.empState });
   for (const c of prepCargo) scene.remove(c.obj);
   prepCargo.length = 0;
   scene.remove(reticle, prepLight);
@@ -326,6 +328,13 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
       case 'waveStart': hud.banner(`ВОЛНА ${ev.index + 1} — ${ev.name.toUpperCase()}`); break;
       case 'waveClear': hud.say('Волна отбита. Передышка.', 3000); break;
       case 'message': hud.say(ev.text, 6000); break;
+      case 'lockOn': sfx.lock(); break;
+      case 'rocketFired': sfx.rocket(); break;
+      case 'emp':
+        sfx.emp();
+        hud.say(ev.stunned ? `ЭМИ: оглушено ${ev.stunned}` : 'ЭМИ: никого в зоне', 1500);
+        if (screens.save.settings.vibration) navigator.vibrate?.(80);
+        break;
       case 'overheat': sfx.overheat(); hud.say('Перегрев зенитки!', 1800); break;
       case 'end': finish(ev); break;
       default: break;
@@ -473,9 +482,13 @@ renderer.setAnimationLoop((t, frame) => {
     const firing = hud.firing || spaceDown;
     guns.follow(cam.view);
     guns.update(dt);
+    const rocket = hud.rocketHeld || keyRocket;
+    const emp = hud.takeEmp() || keyEmp;
+    keyEmp = false;
     for (let k = 0; k < FAST; k++) {
       world.update(dt, {
-        firing, camPos: v3(cam.pos.x, cam.pos.y, cam.pos.z), camDir: v3(cam.dir.x, cam.dir.y, cam.dir.z),
+        firing, rocket, emp: emp && k === 0,
+        camPos: v3(cam.pos.x, cam.pos.y, cam.pos.z), camDir: v3(cam.dir.x, cam.dir.y, cam.dir.z),
       });
       const events = world.drain();
       stage.handle(events);
@@ -501,8 +514,18 @@ renderer.setAnimationLoop((t, frame) => {
       const s = toScreen(cam.view, e.pos);
       const d = cam.pos.distanceTo(new THREE.Vector3(e.pos.x, e.pos.y, e.pos.z));
       const px = (e.def.radius * (e.def.scale ?? 1) * 2 / d) * innerHeight * 0.5 * cam.view.projectionMatrix.elements[5];
-      hud.setLock({ x: (s.x + 1) / 2, y: (1 - s.y) / 2, size: px * 1.3, label: `${e.def.name} · ${d.toFixed(1)} м` });
+      const rs = world.rocketState;
+      const locking = rs && rocket && rs.lockId === e.id;
+      const label = locking
+        ? (rs.locked ? 'ЗАХВАТ! Отпусти — пуск' : `захват ${Math.round(Math.min(1, rs.lockT / 0.6) * 100)}%`)
+        : `${e.def.name} · ${d.toFixed(1)} м`;
+      hud.setLock({ x: (s.x + 1) / 2, y: (1 - s.y) / 2, size: px * 1.3, label, state: locking ? (rs.locked ? 'locked' : 'locking') : undefined });
     } else hud.setLock(null);
+    const rs = world.rocketState;
+    hud.updateSlots(
+      rs ? { ammo: rs.ammo, lock: rs.locked ? 1 : Math.min(1, rs.lockT / 0.6), locked: rs.locked } : null,
+      world.empState ? world.empState.cd / world.empState.cooldown : null,
+    );
     hud.update({
       wave: world.waveIdx, waves: world.waveCount, left: world.enemies.length,
       hull: world.player.hull, heat: world.weapon.heat, overheated: world.weapon.overheated,

@@ -218,6 +218,58 @@ describe('прокачка', () => {
   });
 });
 
+describe('ракеты', () => {
+  const mk = () => new World({
+    seed: 1, floorY: 0, player: CAM, portals: makePortals(CAM, 0, 3.5, 0, makeRng(1)), cargo: [v3(1, 0, 1)],
+    waves: SECTOR1, enemyDefs: ENEMIES, weapons: { rockets: { ammo: 2 } },
+  });
+
+  it('захват за 0,6 с, пуск при отпускании, попадание наносит урон', () => {
+    const w = mk();
+    const e = w.spawn('grabber', 0);
+    e.pos = v3(0, 1.4, 5);
+    const inp = (rocket: boolean) => ({ firing: false, camPos: CAM, camDir: v3(0, 0, 1), rocket });
+    for (let i = 0; i < 10; i++) w.update(0.05, inp(true));
+    expect(w.rocketState!.locked).toBe(false);
+    for (let i = 0; i < 4; i++) w.update(0.05, inp(true));
+    expect(w.rocketState!.locked).toBe(true);
+    w.update(0.05, inp(false));
+    expect(w.rockets).toHaveLength(1);
+    expect(w.rocketState!.ammo).toBe(1);
+    for (let i = 0; i < 60 && w.rockets.length; i++) w.update(0.05, inp(false));
+    expect(w.rockets).toHaveLength(0);
+    expect(e.hp).toBeLessThanOrEqual(e.def.hp - 45);
+  });
+
+  it('без захвата отпускание ничего не запускает', () => {
+    const w = mk();
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), rocket: true });
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), rocket: false });
+    expect(w.rockets).toHaveLength(0);
+    expect(w.rocketState!.ammo).toBe(2);
+  });
+});
+
+describe('ЭМИ', () => {
+  it('оглушает врагов перед игроком, сбивает сгустки, уходит на перезарядку', () => {
+    const w = new World({
+      seed: 1, floorY: 0, player: CAM, portals: makePortals(CAM, 0, 3.5, 0, makeRng(1)), cargo: [v3(1, 0, 1)],
+      waves: SECTOR1, enemyDefs: ENEMIES, weapons: { emp: { cooldown: 10 } },
+    });
+    const front = w.spawn('scout', 0); front.pos = v3(0, 1.4, 4); front.state = 'seek';
+    const back = w.spawn('scout', 0); back.pos = v3(0, 1.4, -4); back.state = 'seek';
+    w.bolts.push({ id: 99, pos: v3(0, 1.4, 2), vel: v3(0, 0, -1), life: 5, from: v3(0, 1.4, 3) });
+    const before = { ...front.pos };
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), emp: true });
+    expect(front.stun).toBeGreaterThan(0);
+    expect(back.stun).toBe(0);
+    expect(w.bolts).toHaveLength(0);
+    for (let i = 0; i < 20; i++) w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), emp: true });
+    expect(front.pos).toEqual(before);
+    expect(w.empState!.cd).toBeGreaterThan(8);
+  });
+});
+
 describe('баланс зенитки', () => {
   it('скаут умирает не более чем за 4 попадания', () => {
     expect(Math.ceil(ENEMIES.scout.hp / FLAK.damage)).toBeLessThanOrEqual(4);

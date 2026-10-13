@@ -36,7 +36,7 @@ export class Screens {
   private cur: ScreenName = 'menu';
   private sector = 1;
   private sel = '';
-  private tab: 'flak' | 'hull' = 'flak';
+  private tab: 'flak' | 'hull' | 'weap' = 'flak';
   private mara = MARA_LINES[Math.floor(Math.random() * MARA_LINES.length)];
 
   constructor(private root: HTMLElement, public save: SaveData, private hooks: ScreenHooks) {
@@ -172,7 +172,8 @@ export class Screens {
   }
 
   private hangar(): string {
-    const rows = UPGRADES.filter((u) => u.group === this.tab).map((u) => {
+    const avail = UPGRADES.filter((u) => u.group === this.tab && (!u.requires || this.save.owned.includes(u.requires)));
+    const rows = (avail.length ? '' : '<div class="card pad mute">Купи ракеты или ЭМИ в Арсенале — здесь появятся их улучшения.</div>') + avail.map((u) => {
       const l = level(this.save, u.key);
       const max = u.costs.length;
       const cost = nextCost(this.save, u.key);
@@ -181,8 +182,10 @@ export class Screens {
       return `<div class="card urow"><div class="grow"><b>${u.name}</b><div class="mute small">${u.fmt(now)}${nxt !== null ? ` → ${u.fmt(nxt)}` : ''}</div></div>
         ${pips(l, max)}${cost === null ? '<button class="btn" disabled>МАКС</button>' : `<button class="btn" data-act="buyu" data-arg="${u.key}" ${this.save.crystals < cost ? 'disabled' : ''}>◆ ${cost}</button>`}</div>`;
     }).join('');
-    const tabs = `<div class="tabs"><span class="${this.tab === 'flak' ? 'on' : ''}" data-act="tab" data-arg="flak">Зенитка</span><span class="${this.tab === 'hull' ? 'on' : ''}" data-act="tab" data-arg="hull">Корпус</span></div>`;
-    const preview = this.tab === 'flak'
+    const tabs = `<div class="tabs"><span class="${this.tab === 'flak' ? 'on' : ''}" data-act="tab" data-arg="flak">Зенитка</span><span class="${this.tab === 'weap' ? 'on' : ''}" data-act="tab" data-arg="weap">Оружие</span><span class="${this.tab === 'hull' ? 'on' : ''}" data-act="tab" data-arg="hull">Корпус</span></div>`;
+    const preview = this.tab === 'weap'
+      ? `<svg viewBox="0 0 24 24" class="hpic" style="max-width:40%"><use href="#w-rocket"/></svg><div class="mute">ДОП. ОРУЖИЕ</div>`
+      : this.tab === 'flak'
       ? `<svg viewBox="0 0 120 80" class="hpic"><g fill="#2a323c" stroke="#5a6878" stroke-width=".6"><rect x="20" y="44" width="80" height="16" rx="3"/><rect x="34" y="34" width="20" height="12" rx="2"/><rect x="66" y="34" width="20" height="12" rx="2"/></g><g fill="#7b8794"><rect x="41" y="8" width="5" height="28" rx="2"/><rect x="74" y="8" width="5" height="28" rx="2"/></g><rect x="30" y="50" width="60" height="2" fill="#38e1ff"/></svg><div class="mute">ЗЕНИТКА</div>`
       : `<svg viewBox="0 0 120 80" class="hpic"><path d="M10 10 H110 V70 H10Z" fill="#9ef1" stroke="#38e1ff" stroke-width="1.5"/><path d="M60 40 L48 26 M60 40 L76 30 M60 40 L66 58 M60 40 L44 50" stroke="#fff8" stroke-width=".8"/></svg><div class="mute">БРОНЯ СТЕКЛА · корпус ${upgradeValue(this.save, 'hull.armor')}</div>`;
     return `<div class="s-bg"></div>${this.top('АНГАР', 'menu', tabs)}
@@ -233,7 +236,7 @@ export class Screens {
       case 'demo': this.hooks.startDemo(this.sector); break;
       case 'buyw': if (arg && buyWeapon(this.save, arg)) { this.persist(); this.show(); } break;
       case 'buyu': if (arg && buyUpgrade(this.save, arg)) { this.persist(); this.show(); } break;
-      case 'tab': this.tab = arg as 'flak' | 'hull'; this.show(); break;
+      case 'tab': this.tab = arg as 'flak' | 'hull' | 'weap'; this.show(); break;
       case 'slot': {
         const i = Number(arg);
         const ready = WEAPONS.filter((w) => w.id !== 'flak' && w.ready && this.save.owned.includes(w.id)).map((w) => w.id);

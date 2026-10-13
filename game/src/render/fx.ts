@@ -141,6 +141,16 @@ export class Fx {
     this.flashes.push({ mesh, life: 0.25, max: 0.25, size: 0.25 * size + 0.1 });
   }
 
+  /** Волна ЭМИ: расширяющаяся голубая сфера вокруг игрока. */
+  empWave(p: THREE.Vector3): void {
+    const mesh = new THREE.Mesh(this.flashGeo, new THREE.MeshBasicMaterial({
+      color: 0x66ddff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, wireframe: true,
+    }));
+    mesh.position.copy(p);
+    this.root.add(mesh);
+    this.flashes.push({ mesh, life: 0.7, max: 0.7, size: 9 });
+  }
+
   /** Превратить объект сцены (часть врага) в летящий обломок. */
   detach(obj: THREE.Object3D, outward: THREE.Vector3): void {
     const piece = obj.clone(true);

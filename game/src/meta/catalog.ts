@@ -42,8 +42,8 @@ export interface WeaponDef {
 
 export const WEAPONS: WeaponDef[] = [
   { id: 'flak', name: 'Зенитка', icon: '⁂', price: 0, ready: true, desc: 'Спаренная автоматическая пушка. Держи «ОГОНЬ» — очередь; перегревается.', best: 'лёгкие цели, сгустки' },
-  { id: 'rockets', name: 'Ракеты «Копьё»', icon: 'R', price: 250, ready: false, desc: 'Держи прицел на цели — захват. Самонаводящаяся ракета, урон по площади.', best: 'хваталки, бронированные' },
-  { id: 'emp', name: 'ЭМИ-импульс', icon: '◎', price: 300, ready: false, desc: 'Оглушает всех врагов в поле зрения и сбивает сгустки.', best: 'рой, стрелки' },
+  { id: 'rockets', name: 'Ракеты «Копьё»', icon: 'R', price: 250, ready: true, desc: 'Держи кнопку ракет и прицел на цели 0,6 с — захват. Отпусти — самонаводящаяся ракета, урон по площади.', best: 'хваталки, стрелки, группы' },
+  { id: 'emp', name: 'ЭМИ-импульс', icon: '◎', price: 300, ready: true, desc: 'Оглушает всех врагов в поле зрения и сбивает сгустки.', best: 'рой, стрелки' },
   { id: 'laser', name: 'Лазер «Луч»', icon: '≈', price: 400, ready: false, desc: 'Непрерывный луч режет броню одной цели.', best: 'броня, тяжёлые' },
   { id: 'tesla', name: 'Молния «Тесла»', icon: 'ϟ', price: 450, ready: false, desc: 'Разряд перескакивает между 3–6 врагами.', best: 'рой, мелочь' },
   { id: 'drone', name: 'Дрон «Оса»', icon: '✦', price: 500, ready: false, unlockSector: 3, desc: 'Помощник сам стреляет и ловит воров.', best: 'отвлечение' },
@@ -51,7 +51,9 @@ export const WEAPONS: WeaponDef[] = [
 
 export interface UpgradeDef {
   key: string;
-  group: 'flak' | 'hull';
+  group: 'flak' | 'hull' | 'weap';
+  /** улучшение доступно, только если оружие куплено */
+  requires?: string;
   name: string;
   /** значение на уровнях 0..max */
   values: number[];
@@ -64,6 +66,8 @@ export const UPGRADES: UpgradeDef[] = [
   { key: 'flak.rate', group: 'flak', name: 'Скорострельность', values: [9, 10.5, 12, 13.5, 15, 16.5], costs: [90, 160, 260, 400, 600], fmt: (v) => `${v} выстр/с` },
   { key: 'flak.cooling', group: 'flak', name: 'Охлаждение', values: [20, 25, 30, 36, 42, 50], costs: [60, 120, 200, 320, 480], fmt: (v) => `${v} ед/с` },
   { key: 'flak.spread', group: 'flak', name: 'Кучность', values: [0.012, 0.01, 0.0085, 0.007, 0.006, 0.005], costs: [50, 100, 180, 280, 420], fmt: (v) => `разброс ${(v * 57.3).toFixed(2)}°` },
+  { key: 'rockets.ammo', group: 'weap', requires: 'rockets', name: 'Ракеты: боезапас', values: [4, 5, 6, 7, 8, 10], costs: [120, 200, 320, 480, 700], fmt: (v) => `${v} за бой` },
+  { key: 'emp.cooldown', group: 'weap', requires: 'emp', name: 'ЭМИ: перезарядка', values: [18, 15, 13, 11, 9, 7], costs: [120, 200, 320, 480, 700], fmt: (v) => `${v} с` },
   { key: 'hull.armor', group: 'hull', name: 'Броня стекла', values: [100, 115, 130, 145, 160, 180], costs: [100, 180, 300, 460, 680], fmt: (v) => `корпус ${v}` },
 ];
 

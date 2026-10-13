@@ -1,12 +1,22 @@
 import { makeRng, type Rng } from './rng';
 import type {
-  Bolt, Cargo, Enemy, EnemyDef, GameEvent, PartState, WaveDef,
+  Bolt, Cargo, Enemy, EnemyDef, GameEvent, PartState, Rocket, WaveDef,
 } from './types';
 import {
   add, clone, dist, distXZ, dot, mul, norm, raySphere, rotY, sub, v3, wrapAngle, type V3,
 } from './vec';
 
-export interface Input { firing: boolean; camPos: V3; camDir: V3 }
+export interface Input {
+  firing: boolean;
+  camPos: V3;
+  camDir: V3;
+  /** кнопка ракет удерживается: захват цели, отпускание — пуск */
+  rocket?: boolean;
+  /** нажатие ЭМИ (срабатывает по фронту) */
+  emp?: boolean;
+}
+
+export interface WeaponsOpt { rockets?: { ammo: number }; emp?: { cooldown: number } }
 
 export interface WorldOptions {
   seed: number;
@@ -19,6 +29,8 @@ export interface WorldOptions {
   /** Параметры зенитки из прокачки (иначе — базовые FLAK). */
   flak?: Partial<typeof FLAK>;
   maxHull?: number;
+  /** доп. оружие в слотах */
+  weapons?: WeaponsOpt;
   /** Направление «вперёд» (рад., как atan2(x, z)): стрелки держатся в переднем полукруге. */
   front?: number;
 }
@@ -39,6 +51,9 @@ const BOLT_SPEED = 1.6;
 const BOLT_DAMAGE = 8;
 const SPARK_DAMAGE = 12;
 
+export const ROCKET = { lockTime: 0.6, speed0: 3, speed1: 8, turn: 5, damage: 45, splash: 1.3, splashDamage: 22, life: 5 };
+export const EMP = { stun: 3, cone: 0.75, range: 16 };
+
 interface Pending { at: number; enemy: string; portal: number; warned: boolean }
 
 export class World {
@@ -50,6 +65,12 @@ export class World {
   portals: V3[];
   enemies: Enemy[] = [];
   bolts: Bolt[] = [];
+  rockets: Rocket[] = [];
+  /** состояние доп. оружия; null — не взято в бой */
+  rocketState: { ammo: number; lockT: number; lockId: number | null; locked: boolean } | null = null;
+  empState: { cd: number; cooldown: number } | null = null;
+  private rocketHeld = false;
+  private empHeld = false;
   weapon = { heat: 0, overheated: false, cd: 0 };
   stats = { kills: 0, crystals: 0, shots: 0, hits: 0, cargoLost: 0, cargoTotal: 0 };
   /** сбито по видам врагов и какие виды встречены */
@@ -77,6 +98,8 @@ export class World {
     this.defs = o.enemyDefs;
     this.front = o.front ?? 0;
     this.flak = { ...FLAK, ...(o.flak ?? {}) };
+    if (o.weapons?.rockets) this.rocketState = { ammo: o.weapons.rockets.ammo, lockT: 0, lockId: null, locked: false };
+    if (o.weapons?.emp) this.empState = { cd: 0, cooldown: o.weapons.emp.cooldown };
     const hull = o.maxHull ?? HULL;
     this.player.hull = hull;
     this.player.maxHull = hull;
@@ -101,6 +124,8 @@ export class World {
     this.player.pos = clone(input.camPos);
 
     this.updateWeapon(dt, input);
+    this.updateRockets(dt, input);
+    this.updateEmp(dt, input);
     this.updateWaves(dt);
     for (const e of this.enemies) if (!e.dead) this.stepEnemy(e, dt);
     this.updateBolts(dt);
@@ -284,7 +309,7 @@ export class World {
       id: this.nextId++, def, pos: clone(this.portals[portal]), vel: v3(), yaw: 0, hp: def.hp,
       parts: def.parts.map((p) => ({ def: p, hp: p.hp, alive: true })),
       state: 'emerge', t: 0, portal, cargoId: null, targetCargo: null,
-      fireCd: 2 + this.rng(), orbitAng: this.rng() * Math.PI * 2, falling: false, dead: false,
+      fireCd: 2 + this.rng(), orbitAng: this.rng() * Math.PI * 2, falling: false, dead: false, stun: 0,
     };
     e.yaw = Math.atan2(this.player.pos.x - e.pos.x, this.player.pos.z - e.pos.z);
     this.enemies.push(e);
@@ -295,6 +320,7 @@ export class World {
 
   private stepEnemy(e: Enemy, dt: number): void {
     e.t += dt;
+    if (e.stun > 0 && !e.falling) { e.stun -= dt; return; }
     if (e.state === 'emerge') {
       if (e.t >= 0.7) {
         e.state = e.def.behavior === 'shooter' ? 'orbit' : e.def.behavior === 'kamikaze' ? 'attack' : 'seek';
@@ -446,6 +472,92 @@ export class World {
   }
 
   // ───── снаряды, груз, игрок ─────
+
+  // ───── ракеты и ЭМИ ─────
+
+  private updateRockets(dt: number, input: Input): void {
+    const rs = this.rocketState;
+    if (rs) {
+      const held = !!input.rocket;
+      if (held && rs.ammo > 0) {
+        const hit = this.pick(input.camPos, norm(input.camDir));
+        const id = hit?.enemy?.id ?? null;
+        if (id !== null && id === rs.lockId) {
+          rs.lockT += dt;
+          if (!rs.locked && rs.lockT >= ROCKET.lockTime) {
+            rs.locked = true;
+            this.events.push({ type: 'lockOn', enemyId: id });
+          }
+        } else if (!rs.locked) {
+          rs.lockId = id;
+          rs.lockT = 0;
+        }
+      }
+      if (!held && this.rocketHeld) {
+        const target = rs.locked ? this.enemies.find((e) => e.id === rs.lockId && !e.dead) : undefined;
+        if (target && rs.ammo > 0) {
+          rs.ammo--;
+          const from = add(input.camPos, v3(0, -0.15, 0));
+          this.rockets.push({ id: this.nextId++, pos: from, vel: mul(norm(input.camDir), ROCKET.speed0), target: target.id, life: ROCKET.life });
+          this.events.push({ type: 'rocketFired', from: clone(from) });
+        }
+        rs.lockId = null; rs.lockT = 0; rs.locked = false;
+      }
+      if (rs.locked && !this.enemies.some((e) => e.id === rs.lockId && !e.dead)) { rs.locked = false; rs.lockId = null; rs.lockT = 0; }
+      this.rocketHeld = held;
+    }
+    for (const r of this.rockets) {
+      r.life -= dt;
+      const t = this.enemies.find((e) => e.id === r.target && !e.dead);
+      const sp = Math.min(ROCKET.speed1, Math.hypot(r.vel.x, r.vel.y, r.vel.z) + 8 * dt);
+      let dir = norm(r.vel);
+      if (t) {
+        const want = norm(sub(t.pos, r.pos));
+        dir = norm(add(dir, mul(sub(want, dir), Math.min(1, ROCKET.turn * dt))));
+      }
+      r.vel = mul(dir, sp);
+      r.pos = add(r.pos, mul(r.vel, dt));
+      const close = t && dist(r.pos, t.pos) < t.def.radius * (t.def.scale ?? 1) + 0.15;
+      if (close || r.life <= 0) {
+        r.life = 0;
+        this.explodeRocket(r.pos, t ?? null);
+      }
+    }
+    this.rockets = this.rockets.filter((r) => r.life > 0);
+  }
+
+  private explodeRocket(at: V3, direct: Enemy | null): void {
+    this.events.push({ type: 'explosion', pos: clone(at), size: 1.1 });
+    if (direct && !direct.dead) {
+      const core = direct.parts.find((p) => p.def.kind === 'core') ?? direct.parts[0];
+      this.damage(direct, core, ROCKET.damage, at);
+    }
+    for (const e of this.enemies) {
+      if (e.dead || e === direct) continue;
+      if (dist(e.pos, at) < ROCKET.splash) this.damage(e, this.nearestPart(e, at), ROCKET.splashDamage, at);
+    }
+  }
+
+  private updateEmp(dt: number, input: Input): void {
+    const es = this.empState;
+    if (!es) return;
+    es.cd = Math.max(0, es.cd - dt);
+    const pressed = !!input.emp && !this.empHeld;
+    this.empHeld = !!input.emp;
+    if (!pressed || es.cd > 0) return;
+    es.cd = es.cooldown;
+    const dir = norm(input.camDir);
+    let n = 0;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const to = sub(e.pos, input.camPos);
+      const d = Math.hypot(to.x, to.y, to.z);
+      if (d < EMP.range && dot(norm(to), dir) > Math.cos(EMP.cone)) { e.stun = EMP.stun; n++; }
+    }
+    for (const b of this.bolts) this.events.push({ type: 'boltShot', pos: clone(b.pos) });
+    this.bolts = [];
+    this.events.push({ type: 'emp', pos: clone(input.camPos), stunned: n });
+  }
 
   private updateBolts(dt: number): void {
     for (const b of this.bolts) {

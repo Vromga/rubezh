@@ -108,3 +108,17 @@ html.ar * { backdrop-filter: none !important; }
 .end .mute, .end .small { color: #8aa3b8; } .end .small { font-size: 12px; font-weight: 400; }
 .pausebox .card { min-width: 260px; }
 .top .pause { cursor: pointer; pointer-events: auto; }
+
+/* слоты доп. оружия над кнопкой огня */
+.slot { right: 160px; width: 74px; height: 74px; border-radius: 16px; background: #0a1a2ad9; border: 2px solid #38e1ff88; display: grid; place-items: center; align-content: center; pointer-events: auto; color: #eaf6ff; font-size: 12px; line-height: 1.1; text-align: center; overflow: hidden; }
+.slot.rocket { bottom: 110px; } .slot.emp { bottom: 22px; }
+.slot svg { width: 34px; height: 34px; } .slot b { font-size: 26px; }
+.slot.on { transform: scale(.94); border-color: #ffc94a; }
+.slot.locked { border-color: #ff4a3a; box-shadow: 0 0 16px #ff4a3a; }
+.slot.empty { opacity: .35; }
+.slot .ring { position: absolute; inset: 0; border-radius: inherit; background: conic-gradient(#ffc94a88 var(--k, 0%), transparent var(--k, 0%)); pointer-events: none; mix-blend-mode: screen; }
+.slot .cd { position: absolute; inset: 0; border-radius: inherit; background: conic-gradient(#000b var(--k, 0%), transparent var(--k, 0%)); pointer-events: none; }
+.slot.cooling { border-color: #38e1ff44; }
+body.lefty .slot { right: auto; left: 160px; }
+.lockbox.locking i { border-color: #ffc94a; } .lockbox.locking span { color: #ffd98a; }
+.lockbox.locked i { border-color: #ff2a1a; box-shadow: 0 0 14px #ff2a1a; } .lockbox.locked span { color: #ff6a5a; font-weight: 800; }

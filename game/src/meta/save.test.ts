@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBattle, buyUpgrade, buyWeapon, computeStars, defaultSave, flakStats, loadSave, maxHull, nextCost, storeSave } from './save';
+import { applyBattle, buyUpgrade, buyWeapon, computeStars, defaultSave, flakStats, loadSave, maxHull, nextCost, storeSave, weaponOpts } from './save';
 
 const mem = () => {
   const m = new Map<string, string>();
@@ -59,6 +59,19 @@ describe('экономика', () => {
     expect(buyWeapon(s, 'rockets')).toBe(false);
     expect(s.owned).toContain('rockets');
     expect(s.crystals).toBe(750);
+  });
+
+  it('купленные ракеты встают в слот и идут в бой с боезапасом из прокачки', () => {
+    const s = defaultSave();
+    s.crystals = 1000;
+    expect(weaponOpts(s)).toEqual({});
+    buyWeapon(s, 'rockets');
+    expect(s.loadout[0]).toBe('rockets');
+    expect(weaponOpts(s)).toEqual({ rockets: { ammo: 4 } });
+    buyUpgrade(s, 'rockets.ammo');
+    expect(weaponOpts(s).rockets!.ammo).toBe(5);
+    s.loadout = [null, null];
+    expect(weaponOpts(s)).toEqual({});
   });
 
   it('дрон закрыт до сектора 3', () => {

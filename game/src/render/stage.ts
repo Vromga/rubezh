@@ -3,7 +3,7 @@ import type { GameEvent } from '../core/types';
 import type { V3 } from '../core/vec';
 import type { World } from '../core/world';
 import { Fx } from './fx';
-import { buildCargo, buildEnemy, buildPortal, type EnemyView, type PortalView } from './meshes';
+import { buildCargo, buildEnemy, buildPortal, buildRocket, type EnemyView, type PortalView } from './meshes';
 
 const toV = (p: V3) => new THREE.Vector3(p.x, p.y, p.z);
 
@@ -21,6 +21,7 @@ export class Stage {
   private boltMeshes = new Map<number, THREE.Mesh>();
   private boltGeo = new THREE.SphereGeometry(0.07, 10, 8);
   private boltMat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
+  private rocketMeshes = new Map<number, THREE.Group>();
   private t = 0;
   private portalScale = 1;
 
@@ -92,6 +93,7 @@ export class Stage {
         }
         case 'explosion': this.fx.explosion(toV(ev.pos), ev.size); break;
         case 'boltShot': this.fx.explosion(toV(ev.pos), 0.25); break;
+        case 'emp': this.fx.empWave(toV(ev.pos)); break;
         case 'telegraph': {
           const v = this.enemies.get(ev.enemyId);
           if (v) v.charge = 0.7;
@@ -130,6 +132,10 @@ export class Stage {
       g.position.set(e.pos.x, e.pos.y, e.pos.z);
       g.rotation.y = e.yaw;
       if (e.falling) { g.rotation.z += dt * 6; g.rotation.x += dt * 3; }
+      if (e.stun > 0) {
+        g.position.x += Math.sin(this.t * 40 + e.id) * 0.01;
+        if (Math.random() < dt * 12) this.fx.sparks(g.position, 2, [0.4, 0.85, 1]);
+      }
       ev.spawnT += dt;
       const s = Math.min(1, ev.spawnT / 0.7);
       g.scale.setScalar((0.2 + 0.8 * (1 - Math.pow(1 - s, 3))) * (e.def.scale ?? 1));
@@ -142,6 +148,7 @@ export class Stage {
         m.mat.emissive.copy(m.emissive);
         m.mat.emissiveIntensity = m.ei;
         if (ev.flash > 0) { m.mat.emissive.setRGB(1, 1, 1); m.mat.emissiveIntensity = 1.2; }
+        else if (e.stun > 0) { m.mat.emissive.setRGB(0.3, 0.8, 1); m.mat.emissiveIntensity = 0.6 + Math.sin(this.t * 25) * 0.4; }
         else if (frac < 0.34) { m.mat.emissive.lerp(new THREE.Color(0xff2200), 0.6); m.mat.emissiveIntensity = Math.max(m.ei, 0.5 + Math.sin(this.t * 12) * 0.3); }
       }
       if (ev.view.charge) {
@@ -184,6 +191,21 @@ export class Stage {
     }
     for (const [id, m] of this.boltMeshes) {
       if (!seen.has(id)) { this.root.remove(m); this.boltMeshes.delete(id); }
+    }
+
+    const rseen = new Set<number>();
+    for (const r of w.rockets) {
+      rseen.add(r.id);
+      let g = this.rocketMeshes.get(r.id);
+      if (!g) { g = buildRocket(); this.root.add(g); this.rocketMeshes.set(r.id, g); }
+      g.position.set(r.pos.x, r.pos.y, r.pos.z);
+      g.lookAt(r.pos.x + r.vel.x, r.pos.y + r.vel.y, r.pos.z + r.vel.z);
+      const tail = g.position.clone().addScaledVector(new THREE.Vector3(r.vel.x, r.vel.y, r.vel.z).normalize(), -0.2);
+      this.fx.fire(tail);
+      this.fx.smokePuff(tail, 0.07);
+    }
+    for (const [id, g] of this.rocketMeshes) {
+      if (!rseen.has(id)) { this.root.remove(g); this.rocketMeshes.delete(id); }
     }
 
     this.fx.update(dt, w.floorY);

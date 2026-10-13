@@ -39,6 +39,8 @@ const $ = <T extends HTMLElement>(root: HTMLElement, sel: string): T => root.que
 /** DOM-интерфейс поверх AR. Кнопки гасят beforexrselect, чтобы касание не считалось выбором в AR. */
 export class Hud {
   firing = false;
+  rocketHeld = false;
+  private empPressed = false;
   onPause?: () => void;
   onResume?: () => void;
   onQuit?: () => void;
@@ -58,6 +60,8 @@ export class Hud {
       <div class="banner"></div>
       <div class="heat" data-b>ЗЕНИТКА<div class="bar"><i></i></div></div>
       <div class="fire tap" data-b>ОГОНЬ</div>
+      <div class="slot rocket tap" data-b style="display:none"><svg viewBox="0 0 24 24"><use href="#w-rocket"/></svg><span class="ammo"></span><i class="ring"></i></div>
+      <div class="slot emp tap" data-b style="display:none"><b>ϟ</b><span>ЭМИ</span><i class="cd"></i></div>
       <div class="arrows"></div>
       <div class="panel tap" data-p style="display:none"></div>
       <div class="end" style="display:none"></div>
@@ -77,6 +81,13 @@ export class Hud {
     fire.addEventListener('pointercancel', up);
     fire.addEventListener('pointerleave', up);
     fire.addEventListener('contextmenu', (e) => e.preventDefault());
+    const rk = $(root, '.rocket');
+    rk.addEventListener('pointerdown', (e) => { e.preventDefault(); this.rocketHeld = true; rk.classList.add('on'); });
+    const rkUp = () => { this.rocketHeld = false; rk.classList.remove('on'); };
+    rk.addEventListener('pointerup', rkUp);
+    rk.addEventListener('pointercancel', rkUp);
+    rk.addEventListener('pointerleave', rkUp);
+    $(root, '.emp').addEventListener('pointerdown', (e) => { e.preventDefault(); this.empPressed = true; });
   }
 
   showBattle(on: boolean): void {
@@ -141,13 +152,15 @@ export class Hud {
   }
 
   /** Рамка вокруг врага на линии огня; null — цели нет. */
-  setLock(lock: { x: number; y: number; size: number; label: string; weak?: boolean } | null): void {
+  setLock(lock: { x: number; y: number; size: number; label: string; weak?: boolean; state?: 'locking' | 'locked' } | null): void {
     const box = $(this.root, '.lockbox');
     const cross = $(this.root, '.cross');
     cross.classList.toggle('lock', lock !== null);
     if (!lock) { box.classList.remove('on'); return; }
     const s = Math.max(36, Math.min(260, lock.size));
     box.classList.add('on');
+    box.classList.toggle('locking', lock.state === 'locking');
+    box.classList.toggle('locked', lock.state === 'locked');
     box.style.left = `${lock.x * 100}%`;
     box.style.top = `${lock.y * 100}%`;
     box.style.width = box.style.height = `${s}px`;
@@ -179,6 +192,38 @@ export class Hud {
     }
     for (const [id, el] of this.arrows) {
       if (!seen.has(id)) { el.remove(); this.arrows.delete(id); }
+    }
+  }
+
+  /** Какие слоты доп. оружия показывать в этом бою. */
+  private slots = { rockets: false, emp: false };
+  setSlots(s: { rockets: boolean; emp: boolean }): void {
+    this.slots = s;
+    $(this.root, '.rocket').style.display = s.rockets ? '' : 'none';
+    $(this.root, '.emp').style.display = s.emp ? '' : 'none';
+    this.rocketHeld = false;
+    this.empPressed = false;
+  }
+
+  /** Однократное нажатие ЭМИ (сбрасывается после чтения). */
+  takeEmp(): boolean {
+    const p = this.empPressed;
+    this.empPressed = false;
+    return p;
+  }
+
+  updateSlots(r: { ammo: number; lock: number; locked: boolean } | null, empCd: number | null): void {
+    if (r && this.slots.rockets) {
+      const el = $(this.root, '.rocket');
+      $(el, '.ammo').textContent = `×${r.ammo}`;
+      el.classList.toggle('empty', r.ammo <= 0);
+      el.classList.toggle('locked', r.locked);
+      ($(el, '.ring')).style.setProperty('--k', `${Math.round(r.lock * 100)}%`);
+    }
+    if (empCd !== null && this.slots.emp) {
+      const el = $(this.root, '.emp');
+      el.classList.toggle('cooling', empCd > 0);
+      ($(el, '.cd')).style.setProperty('--k', `${Math.round(empCd * 100)}%`);
     }
   }
 

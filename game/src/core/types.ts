@@ -40,6 +40,8 @@ export interface Enemy {
   fireCd: number;
   orbitAng: number;
   falling: boolean;
+  /** оглушение ЭМИ, сек */
+  stun: number;
   dead: boolean;
 }
 
@@ -50,6 +52,8 @@ export interface Cargo {
   state: 'idle' | 'carried' | 'falling' | 'lost';
   vy: number;
 }
+
+export interface Rocket { id: number; pos: V3; vel: V3; target: number | null; life: number }
 
 export interface Bolt { id: number; pos: V3; vel: V3; life: number; from: V3 }
 
@@ -76,4 +80,7 @@ export type GameEvent =
   | { type: 'message'; text: string }
   | { type: 'overheat' }
   | { type: 'cooled' }
+  | { type: 'lockOn'; enemyId: number }
+  | { type: 'rocketFired'; from: V3 }
+  | { type: 'emp'; pos: V3; stunned: number }
   | { type: 'end'; result: 'win' | 'lose'; reason: 'hull' | 'cargo' | 'waves' };

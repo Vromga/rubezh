@@ -73,6 +73,9 @@ export class Sfx {
   alarm(): void { this.tone(700, 500, 0.25, 0.12, 'sawtooth'); }
   portal(): void { this.tone(90, 260, 0.9, 0.12, 'sine'); }
   overheat(): void { this.noise(0.5, 2500, 1, 0.2, 'highpass'); this.tone(300, 120, 0.4, 0.1, 'sawtooth'); }
+  lock(): void { this.tone(1200, 1200, 0.08, 0.1, 'square'); setTimeout(() => this.tone(1600, 1600, 0.1, 0.1, 'square'), 90); }
+  rocket(): void { this.noise(0.6, 1200, 0.8, 0.35, 'bandpass', 300); this.tone(200, 600, 0.4, 0.08, 'sawtooth'); }
+  emp(): void { this.tone(60, 900, 0.5, 0.25, 'sine'); this.noise(0.6, 5000, 2, 0.2, 'highpass'); }
   steal(): void { this.tone(500, 900, 0.25, 0.1, 'sine'); }
   lost(): void { this.tone(400, 90, 0.7, 0.2, 'sawtooth'); }
   win(): void { [0, 0.15, 0.3].forEach((d, i) => setTimeout(() => this.tone(440 * 1.25 ** (i * 2), 440 * 1.25 ** (i * 2) * 1.01, 0.4, 0.15, 'triangle'), d * 1000)); }

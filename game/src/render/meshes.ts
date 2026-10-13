@@ -121,6 +121,22 @@ export function buildEnemy(def: EnemyDef): EnemyView {
   return view;
 }
 
+export function buildRocket(): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.24, 10).rotateX(Math.PI / 2), mat(0xc8d2de, 0x000000, 0, 0.5));
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.07, 10).rotateX(Math.PI / 2).translate(0, 0, 0.155), mat(0xff5a3a, 0xff3300, 0.6, 0.2));
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.027, 0.02, 10).rotateX(Math.PI / 2).translate(0, 0, 0.04), mat(0x113344, 0x38e1ff, 1.5, 0));
+  g.add(body, nose, band);
+  for (let i = 0; i < 4; i++) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.05, 0.05), mat(0x7b8794));
+    fin.position.set(0, 0, -0.1);
+    fin.rotation.z = (i * Math.PI) / 2;
+    fin.translateY(0.035);
+    g.add(fin);
+  }
+  return g;
+}
+
 export function buildCargo(kind: 'colonist' | 'crystal'): THREE.Group {
   const g = new THREE.Group();
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.012, 8, 24), mat(0x44e0ff, 0x22ccff, 1.5, 0));
