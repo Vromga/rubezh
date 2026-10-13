@@ -22,6 +22,7 @@ export class Stage {
   private boltGeo = new THREE.SphereGeometry(0.07, 10, 8);
   private boltMat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
   private t = 0;
+  private portalScale = 1;
 
   constructor(world: World) {
     this.world = world;
@@ -32,6 +33,9 @@ export class Stage {
     this.root.add(sun);
 
     const c = world.player.pos;
+    // дальние порталы крупнее, чтобы оставаться заметными
+    const p0 = world.portals[0];
+    this.portalScale = Math.min(2.2, Math.max(1, Math.hypot(p0.x - c.x, p0.z - c.z) / 3.5));
     world.portals.forEach((p) => {
       const pv = buildPortal();
       pv.group.position.copy(toV(p));
@@ -108,7 +112,7 @@ export class Stage {
       this.portalPower[i] = Math.max(0, this.portalPower[i] - dt);
       p.shader.uniforms.time.value = this.t;
       p.shader.uniforms.power.value = this.portalPower[i] > 0 ? 0.5 + Math.sin(this.t * 14) * 0.3 : 0;
-      p.group.scale.setScalar(this.portalPower[i] > 0 ? 1 + Math.sin(this.t * 10) * 0.05 : 1);
+      p.group.scale.setScalar(this.portalScale * (this.portalPower[i] > 0 ? 1 + Math.sin(this.t * 10) * 0.05 : 1));
     });
 
     const alive = new Set<number>();

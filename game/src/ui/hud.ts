@@ -56,7 +56,7 @@ export class Hud {
     p.style.display = '';
     p.innerHTML = `<p>${opts.floorFound
       ? `Коснись пола перед собой, чтобы поставить груз (${opts.min}–${opts.max}). Поставлено: <b>${opts.count}</b>`
-      : 'Поводи телефоном по полу — ищу поверхность…'}</p>
+      : 'Наведи камеру на пол в 1–2 м и слегка поводи. Не нашёл? Коснись экрана или нажми «Авто» — поставлю на глаз.'}</p>
       <div class="row"><button class="ghost auto">Авто</button><button class="go" ${opts.count < opts.min ? 'disabled' : ''}>В БОЙ</button></div>`;
     $(p, '.auto').onclick = opts.onAuto;
     $(p, '.go').onclick = opts.onStart;

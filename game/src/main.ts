@@ -78,7 +78,31 @@ function addPrepCargo(p: V3): void {
   prepCargo.push({ pos: p, obj });
 }
 
+/** Пол «на глаз»: телефон держат примерно на 1,3 м выше пола. */
+const EYE_ABOVE_FLOOR = 1.3;
+function guessFloor(c: CamInfo, yawOffset: number): V3 | null {
+  const dir = c.dir.clone();
+  if (yawOffset !== 0) dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), yawOffset);
+  if (dir.y > -0.15) return null;
+  const t = (-EYE_ABOVE_FLOOR) / dir.y;
+  if (t < 0.8 || t > 6) return null;
+  return v3(c.pos.x + dir.x * t, c.pos.y - EYE_ABOVE_FLOOR, c.pos.z + dir.z * t);
+}
+
 function autoPlace(): void {
+  if (!reticle.visible && !lastHit) {
+    // пол не найден: ставим перед собой на предполагаемый уровень пола
+    const c = getCam();
+    const flat = new THREE.Vector3(c.dir.x, 0, c.dir.z).normalize();
+    const need = Math.max(0, MIN_CARGO - prepCargo.length);
+    for (let i = 0; i < need; i++) {
+      const a = (i - (need - 1) / 2) * 0.6;
+      const d = flat.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a).multiplyScalar(1.8);
+      addPrepCargo(v3(c.pos.x + d.x, c.pos.y - EYE_ABOVE_FLOOR, c.pos.z + d.z));
+    }
+    prepShown = '';
+    return;
+  }
   const base = reticle.visible ? v3(...new THREE.Vector3().setFromMatrixPosition(reticle.matrix).toArray() as [number, number, number]) : lastHit;
   if (!base) return;
   const need = Math.max(0, MIN_CARGO - prepCargo.length);
@@ -139,11 +163,16 @@ async function startAR(): Promise<void> {
   ov.classList.add('on');
   await renderer.xr.setSession(session);
   const ref = await session.requestReferenceSpace('viewer');
-  hitSource = (await session.requestHitTestSource!({ space: ref })) ?? null;
+  hitSource = (await session.requestHitTestSource!({ space: ref, entityTypes: ['plane', 'point'] })) ?? null;
   session.addEventListener('end', () => location.reload());
   session.addEventListener('select', () => {
-    if (phase === 'prep' && reticle.visible) {
+    if (phase !== 'prep') return;
+    if (reticle.visible) {
       addPrepCargo(v3(...new THREE.Vector3().setFromMatrixPosition(reticle.matrix).toArray() as [number, number, number]));
+    } else {
+      const c = getCam();
+      const p = guessFloor(c, 0);
+      if (p) addPrepCargo(p);
     }
   });
   scene.add(reticle, prepLight);
@@ -192,7 +221,7 @@ function startBattle(): void {
   const cargoPos = prepCargo.map((c) => c.pos);
   const floorY = cargoPos.reduce((s, p) => s + p.y, 0) / cargoPos.length;
   const maxR = Math.max(...cargoPos.map((p) => Math.hypot(p.x - cam.pos.x, p.z - cam.pos.z)));
-  const radius = Math.min(5.5, Math.max(3.2, maxR + 1.3));
+  const radius = Math.min(7, Math.max(5, maxR + 2.5));
   const yaw0 = Math.atan2(cam.dir.x, cam.dir.z);
   const seed = Date.now() & 0xffff;
   const portals = makePortals(v3(cam.pos.x, cam.pos.y, cam.pos.z), yaw0, radius, floorY, makeRng(seed));
@@ -311,11 +340,12 @@ renderer.setAnimationLoop((t, frame) => {
     if (hits.length) {
       hitCount++;
       const pose = hits[0].getPose(renderer.xr.getReferenceSpace()!);
-      if (pose) {
+      // пол: нормаль поверхности (ось Y позы) смотрит вверх; стены игнорируем
+      if (pose && pose.transform.matrix[5] > 0.7) {
         reticle.visible = true;
         reticle.matrix.fromArray(pose.transform.matrix);
         lastHit = v3(...new THREE.Vector3().setFromMatrixPosition(reticle.matrix).toArray() as [number, number, number]);
-      }
+      } else reticle.visible = false;
     } else reticle.visible = false;
     refreshPrep();
   }
