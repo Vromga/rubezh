@@ -4,7 +4,7 @@ import { PORTAL } from '../core/world';
 import type { V3 } from '../core/vec';
 import type { World } from '../core/world';
 import { Fx } from './fx';
-import { buildCargo, buildEnemy, buildPortal, buildRocket, type EnemyView, type PortalView } from './meshes';
+import { buildCargo, buildDrone, buildEnemy, buildPortal, buildRocket, type EnemyView, type PortalView } from './meshes';
 
 const toV = (p: V3) => new THREE.Vector3(p.x, p.y, p.z);
 
@@ -41,10 +41,21 @@ export class Stage {
   private mineGeo = new THREE.SphereGeometry(0.06, 10, 8);
   private mineMat = new THREE.MeshBasicMaterial({ color: 0xffa020 });
   private t = 0;
+  private laserBeam: THREE.Mesh;
+  private laserCore: THREE.Mesh;
+  private drone: THREE.Group | null = null;
+  private humT = 0;
+  /** звук гудения лазера — снаружи, чтобы сцена не знала про аудио */
+  onLaserHum?: () => void;
 
   constructor(world: World) {
     this.world = world;
     this.root.add(this.fx.root);
+    this.laserBeam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: 0xff3a6a, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.laserCore = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.laserBeam.visible = this.laserCore.visible = false;
+    this.root.add(this.laserBeam, this.laserCore);
+    if (world.droneState) { this.drone = buildDrone(); this.root.add(this.drone); }
     this.root.add(new THREE.HemisphereLight(0xffffff, 0x445066, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 2);
     sun.position.set(2, 4, 1);
@@ -102,6 +113,8 @@ export class Stage {
           this.fx.sparks(toV(ev.from), 12, [0.75, 0.45, 1]);
           this.fx.sparks(toV(ev.to), 12, [0.75, 0.45, 1]);
           break;
+        case 'tesla': this.fx.arc(ev.points.map(toV)); break;
+        case 'droneShot': this.fx.tracer(toV(ev.from), toV(ev.to)); this.fx.sparks(toV(ev.to), 3, [1, 0.9, 0.4]); break;
         case 'tetherCut': this.fx.sparks(toV(ev.pos), 14, [1, 0.9, 0.6]); break;
         case 'brood': this.fx.sparks(toV(ev.pos), 18, [1, 0.75, 0.25]); break;
         case 'cloakBroken': {
@@ -259,7 +272,33 @@ export class Stage {
     }
 
     this.syncTethers();
+    this.syncArms(dt);
     this.fx.update(dt, w.floorY);
+  }
+
+  /** Луч лазера и дрон «Оса». */
+  private syncArms(dt: number): void {
+    const beam = this.world.laserState?.beam ?? null;
+    this.laserBeam.visible = this.laserCore.visible = !!beam;
+    if (beam) {
+      const a = toV(beam.from), b = toV(beam.to);
+      for (const [m, th] of [[this.laserBeam, 2.4 + Math.sin(this.t * 50) * 0.6], [this.laserCore, 0.8]] as const) {
+        m.position.copy(a);
+        m.lookAt(b);
+        m.scale.set(th, th, a.distanceTo(b));
+      }
+      if (Math.random() < dt * 30) this.fx.sparks(b, 2, [1, 0.4, 0.5]);
+      this.humT -= dt;
+      if (this.humT <= 0) { this.humT = 0.11; this.onLaserHum?.(); }
+    }
+    const ds = this.world.droneState;
+    if (ds && this.drone) {
+      this.drone.position.set(ds.pos.x, ds.pos.y, ds.pos.z);
+      const p = this.world.player.pos;
+      this.drone.rotation.y = Math.atan2(ds.pos.x - p.x, ds.pos.z - p.z) + Math.PI;
+      (this.drone.userData.anim as (t: number) => void)(this.t);
+      this.drone.visible = this.world.jam <= 0 || Math.sin(this.t * 30) > 0;
+    }
   }
 
   /** Тросы гарпунов (стальные) и луч Жнеца (голубой). */

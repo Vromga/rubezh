@@ -59,9 +59,9 @@ export const WEAPONS: WeaponDef[] = [
   { id: 'flak', name: 'Зенитка', icon: '⁂', price: 0, ready: true, desc: 'Спаренная автоматическая пушка. Держи «ОГОНЬ» — очередь; перегревается.', best: 'лёгкие цели, сгустки' },
   { id: 'rockets', name: 'Ракеты «Копьё»', icon: 'R', price: 250, ready: true, desc: 'Держи кнопку ракет и прицел на цели 0,6 с — захват. Отпусти — самонаводящаяся ракета, урон по площади.', best: 'хваталки, стрелки, группы' },
   { id: 'emp', name: 'ЭМИ-импульс', icon: '◎', price: 300, ready: true, desc: 'Оглушает всех врагов в поле зрения и сбивает сгустки.', best: 'рой, стрелки' },
-  { id: 'laser', name: 'Лазер «Луч»', icon: '≈', price: 400, ready: false, desc: 'Непрерывный луч режет броню одной цели.', best: 'броня, тяжёлые' },
-  { id: 'tesla', name: 'Молния «Тесла»', icon: 'ϟ', price: 450, ready: false, desc: 'Разряд перескакивает между 3–6 врагами.', best: 'рой, мелочь' },
-  { id: 'drone', name: 'Дрон «Оса»', icon: '✦', price: 500, ready: false, unlockSector: 3, desc: 'Помощник сам стреляет и ловит воров.', best: 'отвлечение' },
+  { id: 'laser', name: 'Лазер «Луч»', icon: '≈', price: 400, ready: true, desc: 'Держи кнопку — непрерывный луч по прицелу. Режет броню и щиты, сжигает сгустки и тросы. Свой перегрев.', best: 'броня, щиты, тяжёлые' },
+  { id: 'tesla', name: 'Молния «Тесла»', icon: 'ϟ', price: 450, ready: true, desc: 'Коснись — молния бьёт в цель у прицела и перескакивает на соседей (3–6 звеньев), на миг оглушая их. Перезарядка 6 с.', best: 'рой, мелочь' },
+  { id: 'drone', name: 'Дрон «Оса»', icon: '✦', price: 500, ready: true, unlockSector: 3, desc: 'Помощник кружит рядом и сам стреляет — первым делом по ворам с грузом. Помехи глушителя его выключают.', best: 'воры, мелочь' },
 ];
 
 export interface UpgradeDef {
@@ -83,6 +83,9 @@ export const UPGRADES: UpgradeDef[] = [
   { key: 'flak.spread', group: 'flak', name: 'Кучность', values: [0.012, 0.01, 0.0085, 0.007, 0.006, 0.005], costs: [50, 100, 180, 280, 420], fmt: (v) => `разброс ${(v * 57.3).toFixed(2)}°` },
   { key: 'rockets.ammo', group: 'weap', requires: 'rockets', name: 'Ракеты: боезапас', values: [4, 5, 6, 7, 8, 10], costs: [120, 200, 320, 480, 700], fmt: (v) => `${v} за бой` },
   { key: 'emp.cooldown', group: 'weap', requires: 'emp', name: 'ЭМИ: перезарядка', values: [18, 15, 13, 11, 9, 7], costs: [120, 200, 320, 480, 700], fmt: (v) => `${v} с` },
+  { key: 'laser.power', group: 'weap', requires: 'laser', name: 'Лазер: мощность', values: [40, 48, 56, 64, 72, 85], costs: [140, 220, 340, 500, 720], fmt: (v) => `${v} урона/с` },
+  { key: 'tesla.links', group: 'weap', requires: 'tesla', name: 'Тесла: звенья', values: [3, 4, 4, 5, 5, 6], costs: [140, 220, 340, 500, 720], fmt: (v) => `${v} целей` },
+  { key: 'drone.damage', group: 'weap', requires: 'drone', name: 'Дрон: урон', values: [6, 7, 8, 9, 10, 12], costs: [140, 220, 340, 500, 720], fmt: (v) => `${v} за выстрел` },
   { key: 'hull.armor', group: 'hull', name: 'Броня стекла', values: [100, 115, 130, 145, 160, 180], costs: [100, 180, 300, 460, 680], fmt: (v) => `корпус ${v}` },
 ];
 

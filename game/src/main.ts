@@ -7,9 +7,10 @@ import { World } from './core/world';
 import { v3, type V3 } from './core/vec';
 import { ENEMIES } from './data/enemies';
 import { SECTORS, UPGRADES } from './meta/catalog';
-import { applyBattle, computeStars, flakStats, loadSave, maxHull, nextCost, storeSave, weaponOpts } from './meta/save';
+import { applyBattle, computeStars, flakStats, KIT, loadSave, maxHull, nextCost, storeSave, weaponOpts } from './meta/save';
 import { Screens, type ScreenName } from './ui/screens';
 import { Sfx } from './audio/sfx';
+import { TESLA } from './core/arms';
 import { buildCargo } from './render/meshes';
 import { GunRig } from './render/guns';
 import { Stage } from './render/stage';
@@ -56,6 +57,8 @@ function applySettings(): void {
   hud.setCockpit(st.cockpit);
   cracks.strength = st.cracks;
   sfx.setVolume(st.volume);
+  document.body.classList.toggle('lowfx', st.lowfx);
+  if (stage) stage.fx.intensity = st.lowfx ? 0.35 : 1;
 }
 
 type Mode = 'ar' | 'demo';
@@ -70,7 +73,7 @@ const guns = new GunRig();
 let last = 0;
 let demoYaw = 0, demoPitch = 0;
 let spaceDown = false;
-let keyRocket = false, keyEmp = false;
+let keyRocket = false, keyEmp = false, keyLaser = false, keyTesla = false;
 let frames = 0, lastErr = '', hitCount = 0;
 const DEBUG = new URLSearchParams(location.search).has('debug');
 // Планшеты: двойной тап — зум, щипок — масштаб, долгое нажатие — меню Android. Всё глушим.
@@ -288,8 +291,8 @@ function startDemo(sector: number): void {
     demoPitch = Math.max(-1.2, Math.min(1.2, demoPitch - (e.clientY - drag.y) * 0.006));
     drag = { x: e.clientX, y: e.clientY };
   });
-  addEventListener('keydown', (e) => { if (e.code === 'Space') spaceDown = true; if (e.code === 'KeyR') keyRocket = true; if (e.code === 'KeyE') keyEmp = true; });
-  addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; if (e.code === 'KeyR') keyRocket = false; });
+  addEventListener('keydown', (e) => { if (e.code === 'Space') spaceDown = true; if (e.code === 'KeyR') keyRocket = true; if (e.code === 'KeyE') keyEmp = true; if (e.code === 'KeyF') keyLaser = true; if (e.code === 'KeyT') keyTesla = true; });
+  addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; if (e.code === 'KeyR') keyRocket = false; if (e.code === 'KeyF') keyLaser = false; });
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
     demoCam.aspect = innerWidth / innerHeight;
@@ -312,11 +315,14 @@ function startBattle(): void {
     waves: sec.waves!, enemyDefs: ENEMIES, front: yaw0,
     flak: flakStats(screens.save), maxHull: maxHull(screens.save), weapons: weaponOpts(screens.save),
   });
-  hud.setSlots({ rockets: !!world.rocketState, emp: !!world.empState });
+  // ячейки в порядке слотов снаряжения, только взятое в бой
+  const inBattle: Record<string, unknown> = { rockets: world.rocketState, emp: world.empState, laser: world.laserState, tesla: world.teslaState, drone: world.droneState };
+  hud.setSlots(screens.save.loadout.filter((id): id is string => !!id && !!inBattle[id]));
   for (const c of prepCargo) scene.remove(c.obj);
   prepCargo.length = 0;
   scene.remove(reticle, guessRing, prepLight, fan);
   stage = new Stage(world);
+  stage.onLaserHum = () => sfx.laserHum();
   scene.add(stage.root);
   scene.add(guns.group);
   cracks.reset();
@@ -347,9 +353,9 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
         stage!.fx.tracer(guns.fire(), new THREE.Vector3(ev.end.x, ev.end.y, ev.end.z));
         break;
       }
-      case 'enemyHit': hud.hitMarker(ev.weak); sfx.hit(); break;
+      case 'enemyHit': if (!ev.quiet) { hud.hitMarker(ev.weak); sfx.hit(); } break;
       case 'partDestroyed': sfx.partBreak(); break;
-      case 'explosion': sfx.explosion(ev.size); break;
+      case 'explosion': sfx.at(ev.pos).explosion(ev.size); break;
       case 'playerHit': {
         const power = Math.min(1, ev.dmg / 12);
         const s = toScreen(cam.view, ev.from);
@@ -366,15 +372,15 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
         break;
       }
       case 'boltFired':
-        sfx.alarm();
+        sfx.at(ev.from).alarm();
         transient.push({ id: `b${Math.random()}`, pos: ev.from, ttl: 1.2, danger: true });
         break;
       case 'telegraph':
-        sfx.alarm();
+        sfx.at(ev.pos).alarm();
         transient.push({ id: `t${ev.enemyId}`, pos: ev.pos, ttl: 0.9, danger: true });
         break;
       case 'portalOpen':
-        sfx.portal(ev.kind);
+        sfx.at(ev.pos).portal(ev.kind);
         transient.push({ id: `p${ev.id}`, pos: ev.pos, ttl: 2.5, danger: ev.kind === 'out' });
         break;
       case 'portalClose': sfx.portalClose(); break;
@@ -395,11 +401,13 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
         break;
       case 'overheat': sfx.overheat(); hud.say('Перегрев зенитки!', 1800); break;
       case 'jam':
-        sfx.jam();
+        sfx.at(ev.pos).jam();
         transient.push({ id: `j${Math.random()}`, pos: ev.pos, ttl: 1.5, danger: true });
         if (screens.save.settings.vibration) navigator.vibrate?.([30, 30, 30]);
         break;
       case 'blink': sfx.blink(); break;
+      case 'tesla': sfx.zap(); break;
+      case 'droneShot': sfx.pew(); break;
       case 'cloakBroken': hud.say('Генератор невидимости разбит — больше не скроется!', 2500); break;
       case 'tether': sfx.alarm(); hud.say('Трос! Перебей его очередью!', 2000); break;
       case 'tetherCut': hud.say('Трос перебит — груз падает.', 1800); break;
@@ -414,7 +422,7 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
 
 /** Тряска кабины (шаги левиафана, взрывы сапёров). */
 function shake(power: number): void {
-  if (!screens.save.settings.cracks) return;
+  if (!screens.save.settings.cracks || screens.save.settings.lowfx) return;
   ov.classList.remove('shake', 'big');
   void ov.offsetWidth;
   ov.classList.add('shake');
@@ -519,6 +527,20 @@ hud.onPause = () => {
   hud.showPause(true, `Сектор ${curSector} · волна ${Math.max(1, w.waveIdx + 1)}/${w.waveCount} · корпус ${Math.round((w.player.hull / w.player.maxHull) * 100)}%`);
 };
 hud.onResume = () => { paused = false; hud.showPause(false); };
+hud.onFloor = (dy) => {
+  world?.shiftFloor(dy);
+  hud.say(dy > 0 ? 'Пол поднят на 5 см' : 'Пол опущен на 5 см', 1200);
+};
+hud.onRepair = () => {
+  const w = world;
+  const save = screens.save;
+  if (!w || save.kits <= 0 || !w.repair(KIT.heal)) return;
+  save.kits--;
+  storeSave(save);
+  cracks.heal(w.player.hull / w.player.maxHull);
+  sfx.repair();
+  hud.say(`Ремонт: корпус ${Math.round((w.player.hull / w.player.maxHull) * 100)}%`, 1800);
+};
 hud.onQuit = () => {
   // выход посреди боя: кристаллы за сбитых сохраняются
   if (world && !ended) {
@@ -576,13 +598,17 @@ renderer.setAnimationLoop((t, frame) => {
     const cam = getCam();
     const firing = hud.firing || spaceDown;
     guns.follow(cam.view);
+    sfx.listen(cam.pos, cam.dir);
     guns.update(dt);
     const rocket = hud.rocketHeld || keyRocket;
     const emp = hud.takeEmp() || keyEmp;
+    const laser = hud.isHeld('laser') || keyLaser;
+    const tesla = hud.takePress('tesla') || keyTesla;
     keyEmp = false;
+    keyTesla = false;
     for (let k = 0; k < FAST; k++) {
       world.update(dt, {
-        firing, rocket, emp: emp && k === 0,
+        firing, rocket, emp: emp && k === 0, laser, tesla: tesla && k === 0,
         camPos: v3(cam.pos.x, cam.pos.y, cam.pos.z), camDir: v3(cam.dir.x, cam.dir.y, cam.dir.z),
       });
       const events = world.drain();
@@ -617,11 +643,16 @@ renderer.setAnimationLoop((t, frame) => {
       hud.setLock({ x: (s.x + 1) / 2, y: (1 - s.y) / 2, size: px * 1.3, label, state: locking ? (rs.locked ? 'locked' : 'locking') : undefined });
     } else hud.setLock(null);
     const rs = world.rocketState;
-    hud.updateSlots(
-      rs ? { ammo: rs.ammo, lock: rs.locked ? 1 : Math.min(1, rs.lockT / 0.6), locked: rs.locked } : null,
-      world.empState ? world.empState.cd / world.empState.cooldown : null,
-    );
-    hud.setJam(world.jam > 0 && !!(world.rocketState || world.empState));
+    const ts = world.teslaState;
+    const ls = world.laserState;
+    hud.updateSlots({
+      rockets: rs ? { ammo: rs.ammo, lock: rs.locked ? 1 : Math.min(1, rs.lockT / 0.6), locked: rs.locked } : undefined,
+      emp: world.empState ? world.empState.cd / world.empState.cooldown : undefined,
+      tesla: ts ? ts.cd / TESLA.cooldown : undefined,
+      laser: ls ? { heat: ls.heat, over: ls.over } : undefined,
+    });
+    hud.setRepair(world.phase === 'intermission' && world.player.hull < world.player.maxHull && screens.save.kits > 0 ? screens.save.kits : null);
+    hud.setJam(world.jam > 0 && !!(world.rocketState || world.empState || world.laserState || world.teslaState || world.droneState));
     const boss = world.enemies.find((e) => e.def.cls === 'B');
     hud.setBoss(boss ? { name: boss.def.name, frac: boss.hp / boss.def.hp, hidden: boss.cloak > 0.6, shielded: boss.shielded } : null);
     hud.update({

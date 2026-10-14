@@ -1,7 +1,7 @@
 import { ENEMIES } from '../data/enemies';
 import { BESTIARY, SECTORS, UPGRADES, WEAPONS, type SectorDef } from '../meta/catalog';
 import {
-  buyUpgrade, buyWeapon, defaultSave, level, nextCost, storeSave, upgradeValue, type SaveData,
+  buyKit, buyUpgrade, buyWeapon, defaultSave, KIT, level, nextCost, storeSave, upgradeValue, type SaveData,
 } from '../meta/save';
 
 export type ScreenName = 'splash' | 'menu' | 'campaign' | 'briefing' | 'arsenal' | 'hangar' | 'bestiary' | 'settings' | 'ending';
@@ -190,7 +190,7 @@ export class Screens {
 
   private hangar(): string {
     const avail = UPGRADES.filter((u) => u.group === this.tab && (!u.requires || this.save.owned.includes(u.requires)));
-    const rows = (avail.length ? '' : '<div class="card pad mute">Купи ракеты или ЭМИ в Арсенале — здесь появятся их улучшения.</div>') + avail.map((u) => {
+    const rows = (avail.length ? '' : '<div class="card pad mute">Купи доп. оружие в Арсенале — здесь появятся его улучшения.</div>') + avail.map((u) => {
       const l = level(this.save, u.key);
       const max = u.costs.length;
       const cost = nextCost(this.save, u.key);
@@ -198,7 +198,9 @@ export class Screens {
       const nxt = cost !== null ? u.values[l + 1] : null;
       return `<div class="card urow"><div class="grow"><b>${u.name}</b><div class="mute small">${u.fmt(now)}${nxt !== null ? ` → ${u.fmt(nxt)}` : ''}</div></div>
         ${pips(l, max)}${cost === null ? '<button class="btn" disabled>МАКС</button>' : `<button class="btn" data-act="buyu" data-arg="${u.key}" ${this.save.crystals < cost ? 'disabled' : ''}>◆ ${cost}</button>`}</div>`;
-    }).join('');
+    }).join('') + (this.tab === 'hull'
+      ? `<div class="card urow"><div class="grow"><b>Ремкомплект</b><div class="mute small">между волнами: +${KIT.heal} корпуса и трещины затягиваются · в запасе ${this.save.kits}/${KIT.max}</div></div>
+        <button class="btn" data-act="buykit" ${this.save.kits >= KIT.max || this.save.crystals < KIT.price ? 'disabled' : ''}>◆ ${KIT.price}</button></div>` : '');
     const tabs = `<div class="tabs"><span class="${this.tab === 'flak' ? 'on' : ''}" data-act="tab" data-arg="flak">Зенитка</span><span class="${this.tab === 'weap' ? 'on' : ''}" data-act="tab" data-arg="weap">Оружие</span><span class="${this.tab === 'hull' ? 'on' : ''}" data-act="tab" data-arg="hull">Корпус</span></div>`;
     const preview = this.tab === 'weap'
       ? `<svg viewBox="0 0 24 24" class="hpic" style="max-width:40%"><use href="#w-rocket"/></svg><div class="mute">ДОП. ОРУЖИЕ</div>`
@@ -258,7 +260,7 @@ export class Screens {
       <div class="cols3">
         <div class="card pad col"><b class="accent">Управление</b>${tog('lefty', s.lefty, 'Левша (кнопки слева)')}${tog('vibration', s.vibration, 'Вибрация')}</div>
         <div class="card pad col"><b class="accent">Звук</b>${rng('volume', s.volume, 'Громкость')}</div>
-        <div class="card pad col"><b class="accent">Экран</b>${rng('cracks', s.cracks, 'Сила трещин')}${tog('cockpit', s.cockpit, 'Каркас кабины')}
+        <div class="card pad col"><b class="accent">Экран</b>${rng('cracks', s.cracks, 'Сила трещин')}${tog('cockpit', s.cockpit, 'Каркас кабины')}${tog('lowfx', s.lowfx, 'Слабые эффекты (меньше вспышек и тряски)')}
           <button class="btn ghost danger push" data-act="reset">Сбросить прогресс</button></div>
       </div>`;
   }
@@ -277,6 +279,7 @@ export class Screens {
       case 'demo': this.hooks.startDemo(this.sector); break;
       case 'buyw': if (arg && buyWeapon(this.save, arg)) { this.persist(); this.show(); } break;
       case 'buyu': if (arg && buyUpgrade(this.save, arg)) { this.persist(); this.show(); } break;
+      case 'buykit': if (buyKit(this.save)) { this.persist(); this.show(); } break;
       case 'tab': this.tab = arg as 'flak' | 'hull' | 'weap'; this.show(); break;
       case 'ending':
         this.save.ending = arg === 'close' || arg === 'take' ? arg : undefined;

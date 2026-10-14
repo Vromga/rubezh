@@ -101,6 +101,30 @@ export class Fx {
     (this.smoke.points.material as THREE.ShaderMaterial).uniforms.scale.value = s;
   }
 
+  private arcs: { line: THREE.Line; life: number }[] = [];
+
+  /** Молния: ломаная через точки, с дрожью; гаснет за 0,3 с. */
+  arc(points: THREE.Vector3[], color = 0x9fe8ff): void {
+    for (let k = 0; k < 2; k++) {
+      const pts: THREE.Vector3[] = [];
+      for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i], b = points[i + 1];
+        const n = 7;
+        for (let j = 0; j < n; j++) {
+          const p = a.clone().lerp(b, j / n);
+          if (j > 0) p.add(new THREE.Vector3(rnd(0.12), rnd(0.12), rnd(0.12)));
+          pts.push(p);
+        }
+      }
+      pts.push(points[points.length - 1].clone());
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: k ? 0xffffff : color, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.root.add(line);
+      this.arcs.push({ line, life: 0.3 });
+    }
+    for (const p of points.slice(1)) this.sparks(p, 6, [0.6, 0.9, 1]);
+  }
+
   tracer(from: THREE.Vector3, to: THREE.Vector3): void {
     const t = this.tracers.find((x) => x.life <= 0) ?? this.tracers[0];
     t.life = 0.09;
@@ -110,13 +134,18 @@ export class Fx {
     t.mesh.scale.set(1, 1, from.distanceTo(to));
   }
 
+  /** 0..1: «слабые эффекты» уменьшают число частиц. */
+  intensity = 1;
+
   sparks(p: THREE.Vector3, n = 6, color: [number, number, number] = [1, 0.75, 0.3]): void {
+    n = Math.max(1, Math.round(n * this.intensity));
     for (let i = 0; i < n; i++) {
       this.glow.spawn(p, tmpV.set(rnd(1.4), rnd(1.4) + 0.4, rnd(1.4)), 0.35 + Math.random() * 0.3, [...color, 1], 0.03, 0, 3);
     }
   }
 
   smokePuff(p: THREE.Vector3, size = 0.12): void {
+    if (this.intensity < 1 && Math.random() > this.intensity) return;
     this.smoke.spawn(p, tmpV.set(rnd(0.1), 0.25 + Math.random() * 0.2, rnd(0.1)), 1.2, [0.18, 0.18, 0.2, 0.55], size, 0.12);
   }
 
@@ -199,6 +228,17 @@ export class Fx {
       if (f.life > 0) return true;
       this.root.remove(f.mesh);
       (f.mesh.material as THREE.Material).dispose();
+      return false;
+    });
+    for (const a of this.arcs) {
+      a.life -= dt;
+      (a.line.material as THREE.LineBasicMaterial).opacity = Math.max(0, a.life / 0.3);
+    }
+    this.arcs = this.arcs.filter((a) => {
+      if (a.life > 0) return true;
+      this.root.remove(a.line);
+      a.line.geometry.dispose();
+      (a.line.material as THREE.Material).dispose();
       return false;
     });
     for (const t of this.tracers) {

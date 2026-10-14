@@ -39,11 +39,16 @@ const $ = <T extends HTMLElement>(root: HTMLElement, sel: string): T => root.que
 /** DOM-интерфейс поверх AR. Кнопки гасят beforexrselect, чтобы касание не считалось выбором в AR. */
 export class Hud {
   firing = false;
-  rocketHeld = false;
-  private empPressed = false;
+  /** зажатые ячейки оружия и однократные нажатия (по id оружия) */
+  private held = new Set<string>();
+  private pressed = new Set<string>();
+  get rocketHeld(): boolean { return this.held.has('rockets'); }
+  isHeld(id: string): boolean { return this.held.has(id); }
   onPause?: () => void;
   onResume?: () => void;
   onQuit?: () => void;
+  onFloor?: (dy: number) => void;
+  onRepair?: () => void;
   private msgT = 0;
   private arrows = new Map<string, HTMLElement>();
 
@@ -64,16 +69,25 @@ export class Hud {
       <div class="banner"></div>
       <div class="heat" data-b>ЗЕНИТКА<div class="bar"><i></i></div></div>
       <div class="fire tap" data-b>ОГОНЬ</div>
-      <div class="slot rocket tap" data-b style="display:none"><svg viewBox="0 0 24 24"><use href="#w-rocket"/></svg><span class="ammo"></span><i class="ring"></i></div>
-      <div class="slot emp tap" data-b style="display:none"><b>ϟ</b><span>ЭМИ</span><i class="cd"></i></div>
+      <div class="slot tap" data-w="rockets" style="display:none"><svg viewBox="0 0 24 24"><use href="#w-rocket"/></svg><span class="ammo"></span><i class="ring"></i></div>
+      <div class="slot tap" data-w="emp" style="display:none"><b>◎</b><span>ЭМИ</span><i class="cd"></i></div>
+      <div class="slot tap" data-w="laser" style="display:none"><b>≈</b><span>ЛАЗЕР</span><i class="cd"></i></div>
+      <div class="slot tap" data-w="tesla" style="display:none"><b>ϟ</b><span>ТЕСЛА</span><i class="cd"></i></div>
+      <div class="slot passive" data-w="drone" style="display:none"><b>✦</b><span>ОСА</span></div>
       <div class="arrows"></div>
+      <div class="repairbtn tap" style="display:none">✚ РЕМОНТ <span></span></div>
       <div class="panel tap" data-p style="display:none"></div>
       <div class="end" style="display:none"></div>
       <div class="end pausebox" style="display:none"><div class="card"><h2>ПАУЗА</h2><div class="pinfo"></div>
-        <div class="col"><button class="resume">Продолжить</button><button class="ghost quit">Выйти в меню</button></div></div></div>`;
+        <div class="col"><button class="resume">Продолжить</button>
+        <div class="row floorrow"><span class="small">Пол съехал?</span><button class="ghost fup">Пол выше</button><button class="ghost fdown">Пол ниже</button></div>
+        <button class="ghost quit">Выйти в меню</button></div></div></div>`;
     $(root, '.pause').addEventListener('click', () => this.onPause?.());
     $(root, '.resume').addEventListener('click', () => this.onResume?.());
     $(root, '.quit').addEventListener('click', () => this.onQuit?.());
+    $(root, '.fup').addEventListener('click', () => this.onFloor?.(0.05));
+    $(root, '.fdown').addEventListener('click', () => this.onFloor?.(-0.05));
+    $(root, '.repairbtn').addEventListener('click', () => this.onRepair?.());
     for (const el of root.querySelectorAll<HTMLElement>('.tap, .panel, .end')) {
       el.addEventListener('beforexrselect', (e) => e.preventDefault());
     }
@@ -85,23 +99,26 @@ export class Hud {
     fire.addEventListener('pointercancel', up);
     fire.addEventListener('pointerleave', up);
     fire.addEventListener('contextmenu', (e) => e.preventDefault());
-    const rk = $(root, '.rocket');
-    rk.addEventListener('pointerdown', (e) => { e.preventDefault(); this.rocketHeld = true; rk.classList.add('on'); });
-    const rkUp = () => { this.rocketHeld = false; rk.classList.remove('on'); };
-    rk.addEventListener('pointerup', rkUp);
-    rk.addEventListener('pointercancel', rkUp);
-    rk.addEventListener('pointerleave', rkUp);
-    $(root, '.emp').addEventListener('pointerdown', (e) => { e.preventDefault(); this.empPressed = true; });
+    for (const el of root.querySelectorAll<HTMLElement>('.slot.tap')) {
+      const id = el.dataset.w!;
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); this.held.add(id); this.pressed.add(id); el.classList.add('on'); });
+      const off = () => { this.held.delete(id); el.classList.remove('on'); };
+      el.addEventListener('pointerup', off);
+      el.addEventListener('pointercancel', off);
+      el.addEventListener('pointerleave', off);
+    }
   }
+
+  private slotEl(id: string): HTMLElement { return $(this.root, `.slot[data-w="${id}"]`); }
 
   showBattle(on: boolean): void {
     for (const el of this.root.querySelectorAll<HTMLElement>('[data-b], .msg, .arrows')) el.style.display = on ? '' : 'none';
     // слоты доп. оружия — только для взятого в бой
-    $(this.root, '.rocket').style.display = on && this.slots.rockets ? '' : 'none';
-    $(this.root, '.emp').style.display = on && this.slots.emp ? '' : 'none';
+    for (const el of this.root.querySelectorAll<HTMLElement>('.slot')) el.style.display = on && this.slots.includes(el.dataset.w!) ? '' : 'none';
     if (!on) {
       this.firing = false;
       this.setBoss(null);
+      this.setRepair(null);
       this.setNight(false);
       this.setSpace(false);
       this.setJam(false);
@@ -208,21 +225,33 @@ export class Hud {
     }
   }
 
-  /** Какие слоты доп. оружия показывать в этом бою. */
-  private slots = { rockets: false, emp: false };
-  setSlots(s: { rockets: boolean; emp: boolean }): void {
-    this.slots = s;
-    $(this.root, '.rocket').style.display = s.rockets ? '' : 'none';
-    $(this.root, '.emp').style.display = s.emp ? '' : 'none';
-    this.rocketHeld = false;
-    this.empPressed = false;
+  /** Какое доп. оружие стоит в ячейках 1 и 2 в этом бою. */
+  private slots: string[] = [];
+  setSlots(ids: string[]): void {
+    this.slots = ids;
+    for (const el of this.root.querySelectorAll<HTMLElement>('.slot')) {
+      const k = ids.indexOf(el.dataset.w!);
+      el.style.display = k >= 0 ? '' : 'none';
+      el.classList.toggle('s0', k === 0);
+      el.classList.toggle('s1', k === 1);
+    }
+    this.held.clear();
+    this.pressed.clear();
   }
 
-  /** Однократное нажатие ЭМИ (сбрасывается после чтения). */
-  takeEmp(): boolean {
-    const p = this.empPressed;
-    this.empPressed = false;
+  /** Однократное нажатие ячейки (сбрасывается после чтения). */
+  takePress(id: string): boolean {
+    const p = this.pressed.has(id);
+    this.pressed.delete(id);
     return p;
+  }
+  takeEmp(): boolean { return this.takePress('emp'); }
+
+  /** Кнопка ремкомплекта (между волнами): null — скрыть. */
+  setRepair(kits: number | null): void {
+    const el = $(this.root, '.repairbtn');
+    el.style.display = kits ? '' : 'none';
+    if (kits) $(el, 'span').textContent = `×${kits}`;
   }
 
   /** Полоса здоровья босса (null — скрыть). */
@@ -247,18 +276,29 @@ export class Hud {
     for (const el of this.root.querySelectorAll<HTMLElement>('.slot')) el.classList.toggle('jam', on);
   }
 
-  updateSlots(r: { ammo: number; lock: number; locked: boolean } | null, empCd: number | null): void {
-    if (r && this.slots.rockets) {
-      const el = $(this.root, '.rocket');
-      $(el, '.ammo').textContent = `×${r.ammo}`;
-      el.classList.toggle('empty', r.ammo <= 0);
-      el.classList.toggle('locked', r.locked);
-      ($(el, '.ring')).style.setProperty('--k', `${Math.round(r.lock * 100)}%`);
+  /** Состояние ячеек: боезапас и захват ракет, перезарядки (0..1), нагрев лазера. */
+  updateSlots(v: {
+    rockets?: { ammo: number; lock: number; locked: boolean };
+    emp?: number; tesla?: number; laser?: { heat: number; over: boolean }; drone?: boolean;
+  }): void {
+    if (v.rockets && this.slots.includes('rockets')) {
+      const el = this.slotEl('rockets');
+      $(el, '.ammo').textContent = `×${v.rockets.ammo}`;
+      el.classList.toggle('empty', v.rockets.ammo <= 0);
+      el.classList.toggle('locked', v.rockets.locked);
+      ($(el, '.ring')).style.setProperty('--k', `${Math.round(v.rockets.lock * 100)}%`);
     }
-    if (empCd !== null && this.slots.emp) {
-      const el = $(this.root, '.emp');
-      el.classList.toggle('cooling', empCd > 0);
-      ($(el, '.cd')).style.setProperty('--k', `${Math.round(empCd * 100)}%`);
+    const cd = (id: string, k: number | undefined) => {
+      if (k === undefined || !this.slots.includes(id)) return;
+      const el = this.slotEl(id);
+      el.classList.toggle('cooling', k > 0);
+      ($(el, '.cd')).style.setProperty('--k', `${Math.round(k * 100)}%`);
+    };
+    cd('emp', v.emp);
+    cd('tesla', v.tesla);
+    if (v.laser && this.slots.includes('laser')) {
+      cd('laser', v.laser.over ? v.laser.heat / 100 : 0);
+      this.slotEl('laser').classList.toggle('hotbar', !v.laser.over && v.laser.heat > 60);
     }
   }
 

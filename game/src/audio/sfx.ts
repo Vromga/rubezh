@@ -5,6 +5,38 @@ export class Sfx {
   private noiseBuf: AudioBuffer | null = null;
   private lastShot = 0;
   volume = 0.6;
+  /** слушатель (камера) для панорамы: позиция и направление взгляда */
+  private lis = { x: 0, y: 0, z: 0, dx: 0, dz: 1 };
+  private pan = 0;
+  private att = 1;
+
+  listen(p: { x: number; y: number; z: number }, d: { x: number; z: number }): void {
+    const l = Math.hypot(d.x, d.z) || 1;
+    this.lis = { x: p.x, y: p.y, z: p.z, dx: d.x / l, dz: d.z / l };
+  }
+
+  /** Следующий звук — из точки pos: слева/справа и тише вдали. */
+  at(pos: { x: number; y: number; z: number }): this {
+    const L = this.lis;
+    const vx = pos.x - L.x, vz = pos.z - L.z;
+    const d = Math.hypot(vx, vz, pos.y - L.y) || 1;
+    // вектор «вправо» при взгляде (dx, dz): (-dz, dx) — при взгляде на -z это +x, как в three.js
+    const rx = -L.dz, rz = L.dx;
+    this.pan = Math.max(-1, Math.min(1, (vx * rx + vz * rz) / Math.hypot(vx, vz || 1e-6)));
+    this.att = Math.max(0.35, Math.min(1, 3 / d));
+    queueMicrotask(() => { this.pan = 0; this.att = 1; });
+    return this;
+  }
+
+  /** Выход звука: через панораму, если задана точка. */
+  private route(g: GainNode): void {
+    if (!this.ctx || !this.master) return;
+    if (this.pan !== 0 && this.ctx.createStereoPanner) {
+      const p = this.ctx.createStereoPanner();
+      p.pan.value = this.pan;
+      g.connect(p).connect(this.master);
+    } else g.connect(this.master);
+  }
 
   setVolume(v: number): void {
     this.volume = v;
@@ -35,9 +67,10 @@ export class Sfx {
     f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
     if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + dur);
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(gain, t);
+    g.gain.setValueAtTime(gain * this.att, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g);
+    this.route(g);
     src.start(t, Math.random() * 0.5, dur);
   }
 
@@ -49,9 +82,10 @@ export class Sfx {
     o.frequency.setValueAtTime(freq, t);
     o.frequency.exponentialRampToValueAtTime(to, t + dur);
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(gain, t);
+    g.gain.setValueAtTime(gain * this.att, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g).connect(this.master);
+    o.connect(g);
+    this.route(g);
     o.start(t); o.stop(t + dur);
   }
 
@@ -76,6 +110,10 @@ export class Sfx {
     else this.tone(320, 140, 0.7, 0.1, 'sawtooth');
   }
   jam(): void { this.tone(160, 900, 0.5, 0.08, 'square'); this.noise(0.4, 2500, 1, 0.15, 'bandpass'); }
+  repair(): void { this.tone(300, 900, 0.6, 0.08, 'sine'); this.tone(450, 1350, 0.6, 0.05, 'triangle'); }
+  zap(): void { this.noise(0.35, 3000, 2, 0.25, 'bandpass', 600); this.tone(1800, 200, 0.3, 0.08, 'sawtooth'); }
+  pew(): void { this.tone(1400, 900, 0.05, 0.03, 'square'); }
+  laserHum(): void { this.tone(220, 240, 0.12, 0.035, 'sawtooth'); }
   blink(): void { this.tone(1200, 300, 0.15, 0.06, 'sine'); }
   portalClose(): void { this.tone(400, 60, 0.35, 0.08, 'sine'); }
   overheat(): void { this.noise(0.5, 2500, 1, 0.2, 'highpass'); this.tone(300, 120, 0.4, 0.1, 'sawtooth'); }

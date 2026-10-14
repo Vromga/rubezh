@@ -6,6 +6,7 @@ import { SECTOR3 } from '../data/sector3';
 import { SECTOR4 } from '../data/sector4';
 import { SECTOR5 } from '../data/sector5';
 import { CORE } from './finale';
+import { LASER, TESLA } from './arms';
 import { HARPOON, REAPER } from './heavy';
 import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng } from './rng';
@@ -703,5 +704,48 @@ describe('сектор 5', () => {
     run(w, 2400, smartAim, () => w.result !== null);
     expect(w.result).toBe('win');
     expect(w.killsBy.nexus).toBe(1);
+  });
+});
+
+describe('доп. оружие', () => {
+  const quietWaves = [{ name: 't', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }];
+
+  it('лазер режет цель, пока зажат, и перегревается', () => {
+    const w = make({ waves: quietWaves, weapons: { laser: { dps: 40 } } });
+    const e = w.spawn('grabber', 0); e.state = 'orbit'; e.def = { ...e.def, speed: 0 }; e.pos = v3(0, 1.4, 4);
+    const hp = e.hp;
+    for (let i = 0; i < 30; i++) w.update(1 / 30, { firing: false, laser: true, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(e.hp).toBeLessThan(hp - 20);
+    expect(w.laserState!.beam).not.toBeNull();
+    run(w, 100 / LASER.heatUp + 0.5, () => null);
+    for (let i = 0; i < 150; i++) w.update(1 / 30, { firing: false, laser: true, camPos: CAM, camDir: v3(0, 5, 1) });
+    expect(w.laserState!.over).toBe(true);
+  });
+
+  it('лазер пробивает щит щитоносца быстрее зенитки', () => {
+    const w = make({ waves: quietWaves, weapons: { laser: { dps: 40 } } });
+    const e = w.spawn('shield', 0); e.state = 'orbit'; e.def = { ...e.def, speed: 0 }; e.pos = v3(0, 1.4, 4); e.yaw = Math.PI;
+    for (let i = 0; i < 60; i++) w.update(1 / 30, { firing: false, laser: true, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(e.parts.find((p) => p.def.kind === 'shield')!.hp).toBeLessThanOrEqual(120 - 70);
+  });
+
+  it('тесла бьёт цепью по соседям', () => {
+    const w = make({ waves: quietWaves, weapons: { tesla: { links: 4 } } });
+    const es = [0, 1, 2, 3].map((i) => { const e = w.spawn('scout', 0); e.state = 'orbit'; e.def = { ...e.def, speed: 0 }; e.pos = v3(i * 1.2, 1.4, 4); return e; });
+    w.update(0.02, { firing: false, tesla: true, camPos: CAM, camDir: v3(0, 0, 1) });
+    const ev = w.drain().find((x) => x.type === 'tesla');
+    expect(ev && ev.type === 'tesla' ? ev.points.length : 0).toBe(5);
+    expect(es.every((e) => e.hp < e.def.hp || e.dead)).toBe(true);
+    expect(w.teslaState!.cd).toBeCloseTo(TESLA.cooldown, 1);
+  });
+
+  it('дрон стреляет первым делом по вору с грузом', () => {
+    const w = make({ waves: quietWaves, weapons: { drone: { damage: 6 } } });
+    const near = w.spawn('grabber', 0); near.state = 'orbit'; near.def = { ...near.def, speed: 0 }; near.pos = v3(0, 1.4, 2);
+    const thief = w.spawn('scout', 0); thief.state = 'carry'; thief.def = { ...thief.def, speed: 0 }; thief.pos = v3(2, 1.4, 6);
+    const c = w.cargo[0]; c.state = 'carried'; thief.cargoId = c.id;
+    run(w, 1.2);
+    expect(thief.hp < thief.def.hp || thief.dead).toBe(true);
+    expect(near.hp).toBe(near.def.hp);
   });
 });

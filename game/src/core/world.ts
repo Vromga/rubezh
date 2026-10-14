@@ -1,3 +1,4 @@
+import { updateDrone, updateLaser, updateTesla, type DroneState, type LaserState, type TeslaState } from './arms';
 import { stepCore, stepNode } from './finale';
 import { stepAcid, stepHarpoon, stepHive, stepReaper, stepStomper, updateTethers } from './heavy';
 import { pickPortalPos, type PortalZone } from './portals';
@@ -17,9 +18,16 @@ export interface Input {
   rocket?: boolean;
   /** нажатие ЭМИ (срабатывает по фронту) */
   emp?: boolean;
+  /** лазер: луч, пока зажато */
+  laser?: boolean;
+  /** тесла: по фронту нажатия */
+  tesla?: boolean;
 }
 
-export interface WeaponsOpt { rockets?: { ammo: number }; emp?: { cooldown: number } }
+export interface WeaponsOpt {
+  rockets?: { ammo: number }; emp?: { cooldown: number };
+  laser?: { dps: number }; tesla?: { links: number }; drone?: { damage: number };
+}
 
 export interface WorldOptions {
   seed: number;
@@ -86,6 +94,11 @@ export class World {
   /** состояние доп. оружия; null — не взято в бой */
   rocketState: { ammo: number; lockT: number; lockId: number | null; locked: boolean } | null = null;
   empState: { cd: number; cooldown: number } | null = null;
+  laserState: LaserState | null = null;
+  teslaState: TeslaState | null = null;
+  droneState: DroneState | null = null;
+  /** попадания дрона не мигают прицелом игрока */
+  quiet = false;
   /** помехи глушителя: доп. оружие отключено, с */
   jam = 0;
   private rocketHeld = false;
@@ -120,6 +133,9 @@ export class World {
     this.flak = { ...FLAK, ...(o.flak ?? {}) };
     if (o.weapons?.rockets) this.rocketState = { ammo: o.weapons.rockets.ammo, lockT: 0, lockId: null, locked: false };
     if (o.weapons?.emp) this.empState = { cd: 0, cooldown: o.weapons.emp.cooldown };
+    if (o.weapons?.laser) this.laserState = { dps: o.weapons.laser.dps, heat: 0, over: false, acc: 0, beam: null };
+    if (o.weapons?.tesla) this.teslaState = { cd: 0, links: o.weapons.tesla.links, held: false };
+    if (o.weapons?.drone) this.droneState = { dmg: o.weapons.drone.damage, cd: 1, pos: clone(o.player), ang: 0 };
     const hull = o.maxHull ?? HULL;
     this.player.hull = hull;
     this.player.maxHull = hull;
@@ -147,6 +163,9 @@ export class World {
     this.updateWeapon(dt, input);
     this.updateRockets(dt, input);
     this.updateEmp(dt, input);
+    updateLaser(this, dt, input);
+    updateTesla(this, dt, input);
+    updateDrone(this, dt);
     this.updateWaves(dt);
     for (const e of this.enemies) if (!e.dead) this.stepEnemy(e, dt);
     this.updatePortals(dt);
@@ -290,7 +309,7 @@ export class World {
     return add(e.pos, rotY(mul(p.def.off, e.def.scale ?? 1), e.yaw));
   }
 
-  private nearestPart(e: Enemy, at: V3): PartState {
+  /** @internal */ nearestPart(e: Enemy, at: V3): PartState {
     let best = e.parts[0];
     let bestD = Infinity;
     for (const p of e.parts) {
@@ -322,7 +341,7 @@ export class World {
     const mult = kind === 'sensor' ? 2 : kind === 'armor' ? 0.5 : 1;
     e.hp -= dmg * mult;
     part.hp -= dmg;
-    this.events.push({ type: 'enemyHit', enemyId: e.id, partId: part.def.id, point, weak: kind === 'sensor' });
+    this.events.push({ type: 'enemyHit', enemyId: e.id, partId: part.def.id, point, weak: kind === 'sensor', quiet: this.quiet });
     if (part.alive && part.hp <= 0 && kind !== 'core') {
       part.alive = false;
       this.events.push({ type: 'partDestroyed', enemyId: e.id, partId: part.def.id, point: this.partWorld(e, part) });
@@ -996,6 +1015,20 @@ export class World {
         }
       }
     }
+  }
+
+  /** Ремкомплект: только между волнами. */
+  repair(amount: number): boolean {
+    if (this.phase !== 'intermission' || this.result || this.player.hull >= this.player.maxHull) return false;
+    this.player.hull = Math.min(this.player.maxHull, this.player.hull + amount);
+    return true;
+  }
+
+  /** Поправка высоты пола (если AR-трекинг «съехал»). */
+  shiftFloor(dy: number): void {
+    this.floorY += dy;
+    for (const c of this.cargo) if (c.state === 'idle') c.pos = v3(c.pos.x, c.pos.y + dy, c.pos.z);
+    for (const p of this.portals) if (p.floor) p.pos = v3(p.pos.x, p.pos.y + dy, p.pos.z);
   }
 
   hurt(dmg: number, from: V3): void {

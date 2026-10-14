@@ -14,6 +14,9 @@ export class AcidLayer {
       d.style.width = d.style.height = `${size}vmin`;
       this.root.appendChild(d);
       d.addEventListener('animationend', () => d.remove());
+      // стереть пальцем: касание по пятну — «дворник»
+      d.addEventListener('beforexrselect', (e) => e.preventDefault());
+      d.addEventListener('pointerdown', (e) => { e.preventDefault(); d.classList.add('wipe'); });
     }
   }
 

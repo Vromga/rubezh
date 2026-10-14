@@ -901,6 +901,24 @@ export function buildEnemy(def: EnemyDef): EnemyView {
   return view;
 }
 
+/** Дрон «Оса» игрока: квадрокоптер с голубыми огнями. */
+export function buildDrone(): THREE.Group {
+  const g = new THREE.Group();
+  const body = box(0.09, 0.03, 0.09, hull(0xd8e0e8), 0.012);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), mat(0x38e1ff, 0x38e1ff, 2.5, 0)); eye.position.z = 0.05;
+  const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.05, 6).rotateX(Math.PI / 2), dark()); gun.position.set(0, -0.02, 0.04);
+  g.add(body, eye, gun, glow(0x38e1ff, 0.12, 0.6));
+  const props: THREE.Mesh[] = [];
+  for (const [x, z] of [[-0.07, -0.07], [0.07, -0.07], [-0.07, 0.07], [0.07, 0.07]]) {
+    const arm = box(0.07, 0.008, 0.012, dark()); arm.position.set(x / 2, 0, z / 2); arm.rotation.y = Math.atan2(z, x);
+    const prop = new THREE.Mesh(new THREE.CircleGeometry(0.035, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xaab4c2, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+    prop.position.set(x, 0.012, z);
+    g.add(arm, prop); props.push(prop);
+  }
+  g.userData.anim = (t: number) => { props.forEach((p, i) => { p.rotation.y = t * 40 + i; }); g.position.y += 0; };
+  return g;
+}
+
 export function buildRocket(): THREE.Group {
   const g = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.24, 10).rotateX(Math.PI / 2), mat(0xc8d2de, 0x000000, 0, 0.5));

@@ -113,7 +113,9 @@ html.ar * { backdrop-filter: none !important; }
 
 /* слоты доп. оружия над кнопкой огня */
 .slot { right: 160px; width: 74px; height: 74px; border-radius: 16px; background: #0a1a2ad9; border: 2px solid #38e1ff88; display: grid; place-items: center; align-content: center; pointer-events: auto; color: #eaf6ff; font-size: 12px; line-height: 1.1; text-align: center; overflow: hidden; }
-.slot.rocket { bottom: 110px; } .slot.emp { bottom: 22px; }
+.slot.s0 { bottom: 110px; } .slot.s1 { bottom: 22px; }
+.slot.passive { opacity: .8; border-style: dashed; }
+.slot.hotbar { border-color: #ff7a3a; box-shadow: 0 0 12px #ff7a3a88; }
 .slot svg { width: 34px; height: 34px; } .slot b { font-size: 26px; }
 .slot.on { transform: scale(.94); border-color: #ffc94a; }
 .slot.locked { border-color: #ff4a3a; box-shadow: 0 0 16px #ff4a3a; }
@@ -150,13 +152,13 @@ html.ar .slot.jam { filter: none; }
   .fire { right: 16px; bottom: 18px; width: 112px; height: 112px; }
   .heat { left: 16px; bottom: 112px; width: calc(100vw - 168px); max-width: 220px; }
   .slot { right: auto; width: 64px; height: 64px; bottom: 22px; }
-  .slot.rocket { left: 16px; bottom: 22px; }
-  .slot.emp { left: 92px; bottom: 22px; }
+  .slot.s0 { left: 16px; bottom: 22px; }
+  .slot.s1 { left: 92px; bottom: 22px; }
   body.lefty .fire { left: 16px; right: auto; }
   body.lefty .heat { left: auto; right: 16px; }
   body.lefty .slot { left: auto; }
-  body.lefty .slot.rocket { right: 16px; }
-  body.lefty .slot.emp { right: 92px; }
+  body.lefty .slot.s0 { right: 16px; }
+  body.lefty .slot.s1 { right: 92px; }
   .banner { top: 24%; font-size: 26px; }
   .end .card { max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow: auto; padding: 18px 16px; min-width: 0; }
   .endgrid { grid-template-columns: 1fr; justify-items: center; text-align: center; }
@@ -181,3 +183,16 @@ html.ar .slot.jam { filter: none; }
 .space { inset: 0; pointer-events: none; opacity: 0; transition: opacity 1s;
   background: radial-gradient(ellipse at center, transparent 50%, #1a0638aa 85%, #12022add 100%); }
 .space.on { opacity: 1; }
+
+/* ремкомплект, пол, кислота, слабые эффекты */
+.repairbtn { left: 50%; bottom: 150px; transform: translateX(-50%); padding: 12px 22px; border-radius: 14px; background: #0b2a1aee; border: 2px solid #5dffa0; color: #5dffa0; font-weight: 900; letter-spacing: .08em; pointer-events: auto; box-shadow: 0 0 18px #5dffa055; }
+.pausebox .floorrow { justify-content: center; gap: 8px; flex-wrap: wrap; }
+.pausebox .floorrow button { padding: 8px 12px; font-size: 14px; }
+#cracks.healing { animation: heal 1.2s ease-out; }
+@keyframes heal { 0% { filter: drop-shadow(0 0 0 #5dffa0); } 30% { filter: drop-shadow(0 0 14px #5dffa0); opacity: .5; } 100% { filter: none; opacity: 1; } }
+html.ar #cracks.healing { animation: none; }
+#acid i { pointer-events: auto; }
+#acid i.wipe { animation: wipe .35s ease-in forwards; }
+@keyframes wipe { to { opacity: 0; transform: translate(-50%, -50%) scale(1.3, .2); } }
+body.lowfx .dmg, body.lowfx #ov.shake { animation: none !important; }
+body.lowfx .dmg.on { opacity: .35; }

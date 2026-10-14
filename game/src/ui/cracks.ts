@@ -85,6 +85,17 @@ export class CrackLayer {
     this.redraw();
   }
 
+  /** Ремонт: стираются самые старые трещины, стекло «затягивается». */
+  heal(hullFrac: number): void {
+    const keep = Math.round(this.cracks.length * Math.max(0, 1 - hullFrac));
+    this.cracks = this.cracks.slice(this.cracks.length - keep);
+    this.hull = hullFrac;
+    this.canvas.classList.remove('healing');
+    void this.canvas.offsetWidth;
+    this.canvas.classList.add('healing');
+    this.redraw();
+  }
+
   setHull(frac: number): void {
     this.hull = frac;
     this.redraw();

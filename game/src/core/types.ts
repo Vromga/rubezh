@@ -125,7 +125,7 @@ export interface WaveDef { name: string; hint: string; spawns: SpawnDef[] }
 
 export type GameEvent =
   | { type: 'shot'; origin: V3; end: V3; hit: boolean }
-  | { type: 'enemyHit'; enemyId: number; partId: string; point: V3; weak: boolean }
+  | { type: 'enemyHit'; enemyId: number; partId: string; point: V3; weak: boolean; quiet?: boolean }
   | { type: 'partDestroyed'; enemyId: number; partId: string; point: V3 }
   | { type: 'enemyKilled'; enemyId: number; pos: V3; reward: number; defId: string; byPlayer: boolean }
   | { type: 'enemyEscaped'; enemyId: number }
@@ -147,6 +147,8 @@ export type GameEvent =
   | { type: 'acidHit' }
   | { type: 'shake'; power: number }
   | { type: 'brood'; pos: V3; n: number }
+  | { type: 'tesla'; points: V3[] }
+  | { type: 'droneShot'; from: V3; to: V3 }
   | { type: 'waveStart'; index: number; total: number; name: string }
   | { type: 'waveClear'; index: number }
   | { type: 'message'; text: string }

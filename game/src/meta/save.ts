@@ -1,6 +1,7 @@
+import type { WeaponsOpt } from '../core/world';
 import { SECTORS, UPGRADES, WEAPONS } from './catalog';
 
-export interface Settings { cracks: number; lefty: boolean; vibration: boolean; volume: number; cockpit: boolean }
+export interface Settings { cracks: number; lefty: boolean; vibration: boolean; volume: number; cockpit: boolean; lowfx: boolean }
 
 export interface SaveData {
   v: 1;
@@ -17,6 +18,8 @@ export interface SaveData {
   settings: Settings;
   /** выбор в финале: закрыть Разломы или забрать технологию */
   ending?: 'close' | 'take';
+  /** ремкомплекты в запасе */
+  kits: number;
 }
 
 const KEY = 'rubezh.save.v1';
@@ -24,7 +27,8 @@ const KEY = 'rubezh.save.v1';
 export function defaultSave(): SaveData {
   return {
     v: 1, crystals: 0, cores: 0, sectors: {}, unlocked: 1, owned: ['flak'], loadout: [null, null], upgrades: {}, seen: {},
-    settings: { cracks: 1, lefty: false, vibration: true, volume: 0.6, cockpit: true },
+    settings: { cracks: 1, lefty: false, vibration: true, volume: 0.6, cockpit: true, lowfx: false },
+    kits: 0,
   };
 }
 
@@ -96,11 +100,14 @@ export function flakStats(s: SaveData) {
 }
 
 /** Доп. оружие, взятое в бой: только купленное, готовое и стоящее в слотах. */
-export function weaponOpts(s: SaveData): { rockets?: { ammo: number }; emp?: { cooldown: number } } {
+export function weaponOpts(s: SaveData): WeaponsOpt {
   const inSlots = (id: string) => s.loadout.includes(id) && s.owned.includes(id) && !!WEAPONS.find((w) => w.id === id && w.ready);
   return {
     ...(inSlots('rockets') ? { rockets: { ammo: upgradeValue(s, 'rockets.ammo') } } : {}),
     ...(inSlots('emp') ? { emp: { cooldown: upgradeValue(s, 'emp.cooldown') } } : {}),
+    ...(inSlots('laser') ? { laser: { dps: upgradeValue(s, 'laser.power') } } : {}),
+    ...(inSlots('tesla') ? { tesla: { links: upgradeValue(s, 'tesla.links') } } : {}),
+    ...(inSlots('drone') ? { drone: { damage: upgradeValue(s, 'drone.damage') } } : {}),
   };
 }
 
@@ -136,4 +143,13 @@ export function applyBattle(s: SaveData, r: BattleResult): { bonus: number; firs
     s.seen[id].kills += k;
   }
   return { bonus, firstWin };
+}
+
+export const KIT = { price: 60, max: 3, heal: 35 };
+
+export function buyKit(s: SaveData): boolean {
+  if (s.kits >= KIT.max || s.crystals < KIT.price) return false;
+  s.crystals -= KIT.price;
+  s.kits++;
+  return true;
 }
