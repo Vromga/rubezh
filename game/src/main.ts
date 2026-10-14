@@ -42,6 +42,7 @@ const acid = new AcidLayer($('acid'));
 const sfx = new Sfx();
 const screens = new Screens($('screens'), loadSave(), {
   startAR: (n) => void startAR(n),
+  startCam: (n) => void startCam(n),
   startDemo: (n) => startDemo(n),
   onSettings: () => applySettings(),
 });
@@ -61,7 +62,7 @@ function applySettings(): void {
   if (stage) stage.fx.intensity = st.lowfx ? 0.35 : 1;
 }
 
-type Mode = 'ar' | 'demo';
+type Mode = 'ar' | 'demo' | 'cam';
 type Phase = 'menu' | 'prep' | 'battle' | 'end';
 let mode: Mode = 'demo';
 let phase: Phase = 'menu';
@@ -132,14 +133,14 @@ function refreshPrep(): void {
   if (key === prepShown) return;
   prepShown = key;
   hud.showPrep({
-    count: prepCargo.length, max: MAX_CARGO, min: MIN_CARGO, floorFound: lastHit !== null,
+    count: prepCargo.length, max: MAX_CARGO, min: MIN_CARGO, floorFound: lastHit !== null, cam: mode === 'cam',
     onStart: () => startBattle(), onAuto: () => autoPlace(),
   });
 }
 
 function addPrepCargo(p: V3, check = true): void {
   if (prepCargo.length >= MAX_CARGO) return;
-  if (check && mode === 'ar') {
+  if (check && (mode === 'ar' || mode === 'cam')) {
     const c = getCam();
     if (Math.hypot(p.x - c.pos.x, p.z - c.pos.z) < MIN_CARGO_DIST) { hud.say('Слишком близко — поставь груз подальше, в 1–3 м.', 2000); return; }
   }
@@ -197,7 +198,10 @@ function getCam(): CamInfo {
     xc.getWorldDirection(dir);
     return { pos, dir, view: xc.cameras[0] ?? xc };
   }
-  demoCam.rotation.set(demoPitch, demoYaw, 0, 'YXZ');
+  if (mode === 'cam' && gyro.ok) {
+    // гироскоп задаёт поворот; свайп по горизонтали подправляет курс
+    demoCam.quaternion.setFromAxisAngle(Y_AXIS, demoYaw).multiply(gyro.q);
+  } else demoCam.rotation.set(demoPitch, demoYaw, 0, 'YXZ');
   demoCam.updateMatrixWorld(true);
   const dir = new THREE.Vector3();
   demoCam.getWorldDirection(dir);
@@ -262,6 +266,87 @@ async function startAR(sector: number): Promise<void> {
   refreshPrep();
 }
 
+// ───── режим «Камера + гироскоп» (iPhone и Android без ARCore) ─────
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const gyro = { q: new THREE.Quaternion(), ok: false };
+const gyroEuler = new THREE.Euler();
+const Q_SCREEN = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // камера смотрит из «спины» телефона
+const Q_ORIENT = new THREE.Quaternion();
+let camVideo: HTMLVideoElement | null = null;
+let camStream: MediaStream | null = null;
+
+function onOrient(e: DeviceOrientationEvent): void {
+  if (e.alpha === null || e.beta === null || e.gamma === null) return;
+  const d = THREE.MathUtils.DEG2RAD;
+  const orient = (screen.orientation?.angle ?? (window as unknown as { orientation?: number }).orientation ?? 0) * d;
+  gyroEuler.set(e.beta * d, e.alpha * d, -e.gamma * d, 'YXZ');
+  gyro.q.setFromEuler(gyroEuler).multiply(Q_SCREEN).multiply(Q_ORIENT.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -orient));
+  gyro.ok = true;
+}
+
+async function startCam(sector: number): Promise<void> {
+  curSector = sector;
+  sfx.unlock();
+  // iOS: разрешение на датчики движения — строго внутри касания, до любых await
+  const DOE = (window as unknown as { DeviceOrientationEvent?: { requestPermission?: () => Promise<string> } }).DeviceOrientationEvent;
+  const perm = DOE?.requestPermission ? DOE.requestPermission().catch(() => 'denied') : Promise.resolve('granted');
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+  } catch (e) {
+    screens.arStatus = `Нет доступа к камере: ${String(e)}`;
+    screens.show();
+    return;
+  }
+  const granted = (await perm) === 'granted';
+  gyro.ok = false;
+  addEventListener('deviceorientation', onOrient);
+  camVideo = document.createElement('video');
+  camVideo.id = 'camfeed';
+  camVideo.setAttribute('playsinline', '');
+  camVideo.muted = true;
+  camVideo.autoplay = true;
+  camVideo.srcObject = camStream;
+  document.body.prepend(camVideo);
+  void camVideo.play().catch(() => {});
+  mode = 'cam';
+  document.body.classList.add('cam');
+  screens.hide();
+  document.body.appendChild(renderer.domElement);
+  renderer.setSize(innerWidth, innerHeight);
+  demoCam.fov = 62;
+  demoCam.aspect = innerWidth / innerHeight;
+  demoCam.updateProjectionMatrix();
+  demoYaw = 0; demoPitch = -0.5;
+  ensureControls();
+  ov.classList.add('on');
+  scene.add(guessRing, prepLight, fan);
+  hud.showBattle(false);
+  phase = 'prep';
+  prepShown = '';
+  refreshPrep();
+  if (!granted) hud.say('Нет доступа к датчикам движения — поворачивай вид свайпом.', 5000);
+}
+
+/** Касание по экрану на подготовке (режим камеры): груз встаёт туда, куда смотришь. */
+function camTap(): void {
+  if (mode !== 'cam' || phase !== 'prep') return;
+  const p = guessFloor(getCam(), 0);
+  if (p) addPrepCargo(p);
+  else hud.say('Наведи камеру на пол перед собой.', 1800);
+}
+
+function stopCam(): void {
+  removeEventListener('deviceorientation', onOrient);
+  camStream?.getTracks().forEach((t) => t.stop());
+  camStream = null;
+  camVideo?.remove();
+  camVideo = null;
+  gyro.ok = false;
+  document.body.classList.remove('cam');
+  demoCam.fov = 70;
+  demoCam.updateProjectionMatrix();
+}
+
 function startDemo(sector: number): void {
   curSector = sector;
   sfx.unlock();
@@ -279,14 +364,21 @@ function startDemo(sector: number): void {
   for (const [x, z] of ring) addPrepCargo(v3(x, 0, z));
   scene.add(prepLight);
   startBattle();
+  ensureControls();
+}
+
+/** Свайп поворачивает вид (демо) или подправляет курс (камера); касание ставит груз. */
+function ensureControls(): void {
   if (demoReady) return;
   demoReady = true;
   const cv = renderer.domElement;
   let drag: { x: number; y: number } | null = null;
-  cv.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; });
-  addEventListener('pointerup', () => { drag = null; });
+  let moved = 0;
+  cv.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; moved = 0; });
+  addEventListener('pointerup', () => { if (drag && moved < 12) camTap(); drag = null; });
   addEventListener('pointermove', (e) => {
     if (!drag) return;
+    moved += Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y);
     demoYaw -= (e.clientX - drag.x) * 0.006;
     demoPitch = Math.max(-1.2, Math.min(1.2, demoPitch - (e.clientY - drag.y) * 0.006));
     drag = { x: e.clientX, y: e.clientY };
@@ -512,6 +604,7 @@ function backToScreens(): void {
   ov.classList.remove('on');
   document.documentElement.classList.remove('ar');
   document.body.classList.remove('demo');
+  stopCam();
   document.body.style.background = '';
   document.documentElement.style.background = '';
   renderer.domElement.remove();
@@ -594,6 +687,16 @@ renderer.setAnimationLoop((t, frame) => {
     fan.rotation.y = Math.atan2(c.dir.x, c.dir.z);
   }
 
+  if (phase === 'prep' && mode === 'cam') {
+    const c = getCam();
+    const guess = guessFloor(c, 0);
+    guessRing.visible = !!guess;
+    if (guess) guessRing.position.set(guess.x, guess.y, guess.z);
+    fan.position.set(c.pos.x, c.pos.y - EYE_ABOVE_FLOOR + 0.01, c.pos.z);
+    fan.rotation.y = Math.atan2(c.dir.x, c.dir.z);
+    refreshPrep();
+  }
+
   if (phase === 'battle' && world && stage && !paused) {
     const cam = getCam();
     const firing = hud.firing || spaceDown;
@@ -670,15 +773,17 @@ renderer.setAnimationLoop((t, frame) => {
 // ───── экраны ─────
 applySettings();
 screens.show('splash');
+screens.camOk = !!navigator.mediaDevices?.getUserMedia;
+const CAM_NOTE = 'Играем через камеру и гироскоп (пол не распознаётся, груз ставится «на глаз»).';
 if (!navigator.xr) {
-  screens.arStatus = 'AR недоступен: нужен Chrome на Android. Можно играть «Тест без камеры».';
+  screens.arStatus = screens.camOk ? `AR в этом браузере нет. ${CAM_NOTE}` : 'Камера недоступна. Можно играть «Тест без камеры».';
   screens.show();
 } else {
   navigator.xr.isSessionSupported('immersive-ar').then((ok) => {
     screens.arOk = ok;
-    screens.arStatus = ok ? 'AR готов. Встань посреди комнаты.' : 'AR не поддерживается (нужны «Google Play Services for AR»). Доступен тест без камеры.';
+    screens.arStatus = ok ? 'AR готов. Встань посреди комнаты.' : `AR не поддерживается (нужны «Google Play Services for AR»). ${CAM_NOTE}`;
     screens.show();
-  }).catch(() => { screens.arStatus = 'Не удалось проверить AR.'; screens.show(); });
+  }).catch(() => { screens.arStatus = `Не удалось проверить AR. ${CAM_NOTE}`; screens.show(); });
 }
 
 // для отладки и автотестов в браузере
@@ -686,6 +791,7 @@ if (!navigator.xr) {
   get world() { return world; },
   startDemo: (n = 1) => startDemo(n),
   screens,
+  camDir: () => getCam().dir.toArray().map((x) => +x.toFixed(2)),
   /** отладка: навести демо-камеру на точку и держать огонь */
   aimAt(p: V3 | null) {
     spaceDown = p !== null;

@@ -3,7 +3,9 @@
 svg, img { pointer-events: none; }
 #hud .tap svg { pointer-events: none; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: #eaf6ff; overflow: hidden; }
-body.demo > canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+body.demo > canvas, body.cam > canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; }
+body.cam { background: #000; }
+#camfeed { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
 
 #menu { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center;
   background: radial-gradient(ellipse at 50% 30%, #14304a, var(--bg) 70%); padding: 16px; }

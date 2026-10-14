@@ -126,10 +126,12 @@ export class Hud {
   }
 
   // ─ подготовка ─
-  showPrep(opts: { count: number; max: number; min: number; floorFound: boolean; onStart: () => void; onAuto: () => void }): void {
+  showPrep(opts: { count: number; max: number; min: number; floorFound: boolean; cam?: boolean; onStart: () => void; onAuto: () => void }): void {
     const p = $(this.root, '.panel');
     p.style.display = '';
-    p.innerHTML = `<p>${opts.floorFound
+    p.innerHTML = `<p>${opts.cam
+      ? `Держи телефон на уровне груди. Наведи оранжевый кружок на пол перед собой и коснись экрана — там встанет груз (${opts.min}–${opts.max}). Поставлено: <b>${opts.count}</b>`
+      : opts.floorFound
       ? `Фиолетовый веер — сектор порталов. Ставь груз в нём, касаясь пола (${opts.min}–${opts.max}). Поставлено: <b>${opts.count}</b>`
       : 'Наведи камеру на пол в 1–2 м и слегка поводи. Не нашёл? Коснись экрана или нажми «Авто» — поставлю на глаз.'}</p>
       <div class="row"><button class="ghost auto">Авто</button><button class="go" ${opts.count < opts.min ? 'disabled' : ''}>В БОЙ</button></div>`;

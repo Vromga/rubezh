@@ -8,6 +8,7 @@ export type ScreenName = 'splash' | 'menu' | 'campaign' | 'briefing' | 'arsenal'
 
 export interface ScreenHooks {
   startAR(sector: number): void;
+  startCam(sector: number): void;
   startDemo(sector: number): void;
   onSettings(): void;
 }
@@ -36,6 +37,8 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export class Screens {
   arStatus = 'Проверяю AR…';
   arOk = false;
+  /** есть камера — можно играть без WebXR (iPhone) */
+  camOk = false;
   private cur: ScreenName = 'menu';
   private sector = 1;
   private sel = '';
@@ -158,7 +161,10 @@ export class Screens {
           <div class="card wrow">${wIcon(WEAPONS[0])}<div class="grow"><b>Зенитка</b><div class="mute small">урон ${upgradeValue(this.save, 'flak.damage')} · ${upgradeValue(this.save, 'flak.rate')} выстр/с</div></div></div>
           ${slot(0)}${slot(1)}
           ${rec && !this.save.owned.includes(rec.id) ? `<div class="small ok">Мара советует: ${rec.name}${rec.ready ? '' : ' (скоро)'}</div>` : ''}
-          <button class="btn big push" data-act="ar" ${this.arOk ? '' : 'disabled'}>Подготовить комнату ›</button>
+          ${this.arOk || !this.camOk
+            ? `<button class="btn big push" data-act="ar" ${this.arOk ? '' : 'disabled'}>Подготовить комнату ›</button>`
+            : '<button class="btn big push" data-act="cam">Камера + гироскоп ›</button>'}
+          ${this.arOk && this.camOk ? '<button class="btn ghost" data-act="cam">Камера + гироскоп (без AR)</button>' : ''}
           <button class="btn ghost" data-act="demo">Тест без камеры</button>
         </div>
       </div>`;
@@ -276,6 +282,7 @@ export class Screens {
     }
     switch (t.dataset.act) {
       case 'ar': this.hooks.startAR(this.sector); break;
+      case 'cam': this.hooks.startCam(this.sector); break;
       case 'demo': this.hooks.startDemo(this.sector); break;
       case 'buyw': if (arg && buyWeapon(this.save, arg)) { this.persist(); this.show(); } break;
       case 'buyu': if (arg && buyUpgrade(this.save, arg)) { this.persist(); this.show(); } break;
