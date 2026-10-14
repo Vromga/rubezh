@@ -1,6 +1,7 @@
+import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng, type Rng } from './rng';
 import type {
-  Bolt, Cargo, Enemy, EnemyDef, GameEvent, Mine, PartState, Rocket, WaveDef,
+  Bolt, Cargo, Enemy, EnemyDef, GameEvent, Mine, PartState, Portal, Rocket, WaveDef,
 } from './types';
 import {
   add, clone, dist, distXZ, dot, mul, norm, raySphere, rotY, sub, v3, wrapAngle, type V3,
@@ -23,7 +24,8 @@ export interface WorldOptions {
   floorY: number;
   player: V3;
   cargo: V3[];
-  portals: V3[];
+  /** где открываются порталы */
+  zone: PortalZone;
   waves: WaveDef[];
   enemyDefs: Record<string, EnemyDef>;
   /** Параметры зенитки из прокачки (иначе — базовые FLAK). */
@@ -55,7 +57,10 @@ export const ROCKET = { lockTime: 0.6, speed0: 3, speed1: 8, turn: 5, damage: 45
 export const BOMB = { height: 1.6, period: 3.5, gravity: 3, blast: 0.6 };
 export const EMP = { stun: 3, cone: 0.75, range: 16 };
 
-interface Pending { at: number; enemy: string; portal: number; warned: boolean }
+/** Тайминги порталов, с. */
+export const PORTAL = { lead: 1.8, open: 0.6, close: 0.5, linger: 1.2, enter: 0.5 };
+
+interface Pending { at: number; enemy: string; lane?: number; portalId: number | null }
 
 export class World {
   time = 0;
@@ -63,7 +68,7 @@ export class World {
   player = { pos: v3(), hull: HULL, maxHull: HULL };
   floorY: number;
   cargo: Cargo[] = [];
-  portals: V3[];
+  portals: Portal[] = [];
   enemies: Enemy[] = [];
   bolts: Bolt[] = [];
   rockets: Rocket[] = [];
@@ -90,12 +95,13 @@ export class World {
   private waves: WaveDef[];
   private defs: Record<string, EnemyDef>;
   private front: number;
+  private zone: PortalZone;
 
   constructor(o: WorldOptions) {
     this.rng = makeRng(o.seed);
     this.floorY = o.floorY;
     this.player.pos = clone(o.player);
-    this.portals = o.portals;
+    this.zone = o.zone;
     this.waves = o.waves;
     this.defs = o.enemyDefs;
     this.front = o.front ?? 0;
@@ -130,6 +136,7 @@ export class World {
     this.updateEmp(dt, input);
     this.updateWaves(dt);
     for (const e of this.enemies) if (!e.dead) this.stepEnemy(e, dt);
+    this.updatePortals(dt);
     this.updateBolts(dt);
     this.updateMines(dt);
     this.updateCargo(dt);
@@ -296,15 +303,15 @@ export class World {
       if (this.phaseT <= 0) this.startWave(this.waveIdx + 1);
       return;
     }
+    // портал открывается заранее, враг вылезает из него в назначенное время
     for (const p of this.pending) {
-      if (!p.warned && this.time >= p.at - 1.5) {
-        p.warned = true;
-        this.events.push({ type: 'portalWarn', portal: p.portal });
+      if (p.portalId === null && this.time >= p.at - PORTAL.lead) {
+        p.portalId = this.openPortal('in', null, p.lane).id;
       }
     }
     const due = this.pending.filter((p) => this.time >= p.at);
     this.pending = this.pending.filter((p) => this.time < p.at);
-    for (const p of due) this.spawn(p.enemy, p.portal);
+    for (const p of due) this.spawn(p.enemy, p.portalId ?? -1);
     if (this.pending.length === 0 && this.enemies.length === 0) {
       this.events.push({ type: 'waveClear', index: this.waveIdx });
       if (this.waveIdx >= this.waves.length - 1) {
@@ -324,21 +331,29 @@ export class World {
     this.pending = w.spawns.map((s) => ({
       at: this.time + 2.5 + s.t,
       enemy: s.enemy,
-      portal: s.portal ?? Math.floor(this.rng() * this.portals.length),
-      warned: false,
+      lane: s.portal,
+      portalId: null,
     }));
     this.events.push({ type: 'waveStart', index: i, total: this.waves.length, name: w.name });
     this.events.push({ type: 'message', text: w.hint });
   }
 
-  spawn(defId: string, portal: number): Enemy {
+  /** Враг вылезает из портала portalId (если его нет — портал открывается сразу). */
+  spawn(defId: string, portalId = -1): Enemy {
     const def = this.defs[defId];
     this.seen.add(defId);
+    let portal = this.portals.find((q) => q.id === portalId && q.kind === 'in');
+    if (!portal) {
+      portal = this.openPortal('in', null);
+      portal.state = 'open';
+    }
+    portal.closeAt = this.time + PORTAL.linger;
     const e: Enemy = {
-      id: this.nextId++, def, pos: clone(this.portals[portal]), vel: v3(), yaw: 0, hp: def.hp,
+      id: this.nextId++, def, pos: clone(portal.pos), vel: v3(), yaw: 0, hp: def.hp,
       parts: def.parts.map((p) => ({ def: p, hp: p.hp, alive: true })),
-      state: 'emerge', t: 0, portal, cargoId: null, targetCargo: null,
+      state: 'emerge', t: 0, portal: portal.id, cargoId: null, targetCargo: null,
       fireCd: 2 + this.rng(), orbitAng: this.rng() * Math.PI * 2, falling: false, dead: false, stun: 0,
+      exitId: null,
     };
     e.yaw = Math.atan2(this.player.pos.x - e.pos.x, this.player.pos.z - e.pos.z);
     this.enemies.push(e);
@@ -351,6 +366,9 @@ export class World {
     e.t += dt;
     if (e.stun > 0 && !e.falling) { e.stun -= dt; return; }
     if (e.state === 'emerge') {
+      // вылезает из портала в сторону игрока
+      const out = norm(sub(this.player.pos, e.pos));
+      e.pos = add(e.pos, mul(v3(out.x, 0, out.z), 0.9 * dt));
       if (e.t >= 0.7) {
         e.state = e.def.behavior === 'shooter' ? 'orbit' : e.def.behavior === 'kamikaze' ? 'attack' : e.def.behavior === 'bomber' ? 'bomb' : 'seek';
       }
@@ -409,16 +427,17 @@ export class World {
     if (distXZ(e.pos, target) < 0.22 && Math.abs(e.pos.y - target.y) < 0.25) {
       c.state = 'carried';
       e.cargoId = c.id;
-      e.portal = this.nearestPortal(e.pos);
       e.state = 'carry';
       this.events.push({ type: 'cargoGrabbed', cargoId: c.id, pos: clone(c.pos) });
     }
   }
 
   private stepCarry(e: Enemy, speed: number, dt: number): void {
-    const p = this.portals[e.portal];
+    const exit = this.exitFor(e);
+    const p = exit.pos;
     this.flyTo(e, p, speed, dt, 0.15);
-    if (dist(e.pos, p) < 0.5) {
+    if (dist(e.pos, p) < PORTAL.enter && exit.state !== 'opening') {
+      this.closePortal(exit);
       const c = this.cargoOf(e.cargoId);
       if (c) {
         c.state = 'lost';
@@ -432,9 +451,11 @@ export class World {
   }
 
   private stepFlee(e: Enemy, speed: number, dt: number): void {
-    const p = this.portals[this.nearestPortal(e.pos)];
+    const exit = this.exitFor(e);
+    const p = exit.pos;
     this.flyTo(e, p, speed * 1.3, dt, 0.2);
-    if (dist(e.pos, p) < 0.5) {
+    if (dist(e.pos, p) < PORTAL.enter && exit.state !== 'opening') {
+      this.closePortal(exit);
       e.dead = true;
       this.events.push({ type: 'enemyEscaped', enemyId: e.id });
     }
@@ -526,14 +547,47 @@ export class World {
     return best;
   }
 
-  private nearestPortal(from: V3): number {
-    let bi = 0;
-    let bd = Infinity;
-    this.portals.forEach((p, i) => {
-      const d = dist(from, p);
-      if (d < bd) { bd = d; bi = i; }
-    });
-    return bi;
+  // ───── порталы ─────
+
+  private openPortal(kind: 'in' | 'out', owner: number | null, lane?: number): Portal {
+    const avoid = this.portals.map((q) => q.pos);
+    const pos = pickPortalPos(this.zone, this.floorY, this.rng, avoid, lane);
+    const p: Portal = { id: this.nextId++, pos, kind, state: 'opening', t: 0, owner, closeAt: Infinity };
+    this.portals.push(p);
+    this.events.push({ type: 'portalOpen', id: p.id, pos: clone(pos), kind });
+    return p;
+  }
+
+  private closePortal(p: Portal): void {
+    if (p.state === 'closing') return;
+    p.state = 'closing';
+    p.t = 0;
+    this.events.push({ type: 'portalClose', id: p.id, kind: p.kind });
+  }
+
+  /** Портал ухода врага: открывается, когда враг решил уйти. */
+  private exitFor(e: Enemy): Portal {
+    let p = this.portals.find((q) => q.id === e.exitId && q.state !== 'closing');
+    if (!p) {
+      p = this.openPortal('out', e.id);
+      e.exitId = p.id;
+    }
+    return p;
+  }
+
+  private updatePortals(dt: number): void {
+    for (const p of this.portals) {
+      p.t += dt;
+      if (p.state === 'opening' && p.t >= PORTAL.open) { p.state = 'open'; p.t = 0; }
+      if (p.state === 'closing') continue;
+      if (p.kind === 'in' && this.time >= p.closeAt) this.closePortal(p);
+      if (p.kind === 'out') {
+        const e = this.enemies.find((x) => x.id === p.owner);
+        // хозяин сбит или передумал уходить — портал схлопывается
+        if (!e || e.dead || e.falling || (e.state !== 'carry' && e.state !== 'flee')) this.closePortal(p);
+      }
+    }
+    this.portals = this.portals.filter((p) => !(p.state === 'closing' && p.t >= PORTAL.close));
   }
 
   private dropCargo(e: Enemy): void {

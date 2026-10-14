@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { GameEvent } from '../core/types';
+import type { GameEvent, Portal } from '../core/types';
+import { PORTAL } from '../core/world';
 import type { V3 } from '../core/vec';
 import type { World } from '../core/world';
 import { Fx } from './fx';
@@ -16,8 +17,7 @@ export class Stage {
   private world: World;
   private enemies = new Map<number, EView>();
   private cargo = new Map<number, THREE.Group>();
-  private portals: PortalView[] = [];
-  private portalPower: number[] = [];
+  private portals = new Map<number, PortalView>();
   private boltMeshes = new Map<number, THREE.Mesh>();
   private boltGeo = new THREE.SphereGeometry(0.07, 10, 8);
   private boltMat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
@@ -26,28 +26,15 @@ export class Stage {
   private mineGeo = new THREE.SphereGeometry(0.06, 10, 8);
   private mineMat = new THREE.MeshBasicMaterial({ color: 0xffa020 });
   private t = 0;
-  private portalScale = 1;
 
   constructor(world: World) {
     this.world = world;
     this.root.add(this.fx.root);
-    this.root.add(new THREE.HemisphereLight(0xffffff, 0x445066, 1.8));
+    this.root.add(new THREE.HemisphereLight(0xffffff, 0x445066, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 2);
     sun.position.set(2, 4, 1);
     this.root.add(sun);
 
-    const c = world.player.pos;
-    // дальние порталы крупнее, чтобы оставаться заметными
-    const p0 = world.portals[0];
-    this.portalScale = Math.min(1.9, Math.max(1, Math.hypot(p0.x - c.x, p0.z - c.z) / 3.5));
-    world.portals.forEach((p) => {
-      const pv = buildPortal();
-      pv.group.position.copy(toV(p));
-      pv.group.lookAt(c.x, p.y, c.z);
-      this.root.add(pv.group);
-      this.portals.push(pv);
-      this.portalPower.push(0);
-    });
     for (const cg of world.cargo) {
       const g = buildCargo(cg.kind);
       g.position.copy(toV(cg.pos));
@@ -102,7 +89,12 @@ export class Stage {
           if (v) v.charge = 0.7;
           break;
         }
-        case 'portalWarn': this.portalPower[ev.portal] = 2.5; break;
+        case 'portalOpen': this.fx.sparks(toV(ev.pos), 14, ev.kind === 'in' ? [0.8, 0.4, 1] : [1, 0.35, 0.15]); break;
+        case 'portalClose': {
+          const pv = this.portals.get(ev.id);
+          if (pv) this.fx.sparks(pv.group.position, 10, ev.kind === 'in' ? [0.8, 0.4, 1] : [1, 0.35, 0.15]);
+          break;
+        }
         case 'cargoLost': this.fx.sparks(toV(ev.pos), 14, [0.6, 0.4, 1]); break;
         default: break;
       }
@@ -113,12 +105,7 @@ export class Stage {
     this.t += dt;
     const w = this.world;
 
-    this.portals.forEach((p, i) => {
-      this.portalPower[i] = Math.max(0, this.portalPower[i] - dt);
-      p.shader.uniforms.time.value = this.t;
-      p.shader.uniforms.power.value = this.portalPower[i] > 0 ? 0.5 + Math.sin(this.t * 14) * 0.3 : 0;
-      p.group.scale.setScalar(this.portalScale * (this.portalPower[i] > 0 ? 1 + Math.sin(this.t * 10) * 0.05 : 1));
-    });
+    this.syncPortals();
 
     const alive = new Set<number>();
     for (const e of w.enemies) {
@@ -142,7 +129,6 @@ export class Stage {
       ev.spawnT += dt;
       const s = Math.min(1, ev.spawnT / 0.7);
       g.scale.setScalar((0.2 + 0.8 * (1 - Math.pow(1 - s, 3))) * (e.def.scale ?? 1));
-      ev.view.anim(this.t + e.id);
 
       const frac = e.hp / e.def.hp;
       ev.flash = Math.max(0, ev.flash - dt);
@@ -154,6 +140,8 @@ export class Stage {
         else if (e.stun > 0) { m.mat.emissive.setRGB(0.3, 0.8, 1); m.mat.emissiveIntensity = 0.6 + Math.sin(this.t * 25) * 0.4; }
         else if (frac < 0.34) { m.mat.emissive.lerp(new THREE.Color(0xff2200), 0.6); m.mat.emissiveIntensity = Math.max(m.ei, 0.5 + Math.sin(this.t * 12) * 0.3); }
       }
+      // анимация после сброса материалов: мигалки и пульс ядра не затираются
+      if (ev.flash <= 0) ev.view.anim(this.t + e.id);
       if (ev.view.charge) {
         ev.charge = Math.max(0, ev.charge - dt);
         ev.view.charge(ev.charge / 0.7);
@@ -227,7 +215,45 @@ export class Stage {
     this.fx.update(dt, w.floorY);
   }
 
-  portalPos(i: number): THREE.Vector3 {
-    return this.portals[i].group.position;
+  /** Порталы раскрываются из точки, живут, пока нужны, и схлопываются. */
+  private syncPortals(): void {
+    const w = this.world;
+    const c = w.player.pos;
+    const live = new Set<number>();
+    for (const p of w.portals) {
+      live.add(p.id);
+      let pv = this.portals.get(p.id);
+      if (!pv) {
+        pv = buildPortal(p.kind);
+        pv.group.position.copy(toV(p.pos));
+        pv.group.lookAt(c.x, p.pos.y, c.z);
+        this.root.add(pv.group);
+        this.portals.set(p.id, pv);
+      }
+      const k = portalOpenness(p);
+      // дальние порталы крупнее, чтобы оставаться заметными
+      const far = Math.min(1.9, Math.max(1, Math.hypot(p.pos.x - c.x, p.pos.z - c.z) / 3.5));
+      pv.group.scale.setScalar(Math.max(0.001, k * far * (1 + Math.sin(this.t * 9 + p.id) * 0.03)));
+      pv.spin.rotation.z = this.t * (p.kind === 'in' ? 1.5 : -2.2);
+      pv.shader.uniforms.time.value = this.t;
+      pv.shader.uniforms.power.value = p.state === 'opening' ? 1 - k : p.state === 'closing' ? 0.8 : 0.15 + Math.sin(this.t * 6) * 0.1;
+    }
+    for (const [id, pv] of this.portals) {
+      if (!live.has(id)) { this.root.remove(pv.group); this.portals.delete(id); }
+    }
   }
+}
+
+/** Насколько раскрыт портал (0..1) с «пружинкой» при открытии. */
+function portalOpenness(p: Portal): number {
+  if (p.state === 'opening') {
+    const x = Math.min(1, p.t / PORTAL.open);
+    const c = 1.7;
+    return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2);
+  }
+  if (p.state === 'closing') {
+    const x = Math.min(1, p.t / PORTAL.close);
+    return x < 0.25 ? 1 + x * 0.6 : (1.15 * (1 - x)) / 0.75;
+  }
+  return 1;
 }

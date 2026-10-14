@@ -3,7 +3,7 @@ import { v3 } from '../core/vec';
 
 // Враги описаны данными: баланс правится без изменения кода боя.
 // Порталы далеко (9–12 м), поэтому роботы крупнее «игрушечного» размера.
-const S = 1.6;
+const S = 1.8;
 
 export const ENEMIES: Record<string, EnemyDef> = {
   scout: {

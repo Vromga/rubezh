@@ -45,6 +45,22 @@ export interface Enemy {
   /** оглушение ЭМИ, сек */
   stun: number;
   dead: boolean;
+  /** портал ухода, открытый для этого врага */
+  exitId: number | null;
+}
+
+/** Портал: 'in' — вторжение (открывается заранее), 'out' — уход (открывается перед бегством). */
+export interface Portal {
+  id: number;
+  pos: V3;
+  kind: 'in' | 'out';
+  state: 'opening' | 'open' | 'closing';
+  /** время в текущем состоянии, с */
+  t: number;
+  /** для 'out' — враг, который в него уходит */
+  owner: number | null;
+  /** для 'in' — когда закрыться (время мира) */
+  closeAt: number;
 }
 
 export interface Cargo {
@@ -78,7 +94,8 @@ export type GameEvent =
   | { type: 'cargoGrabbed'; cargoId: number; pos: V3 }
   | { type: 'cargoDropped'; cargoId: number; pos: V3 }
   | { type: 'cargoLost'; cargoId: number; pos: V3 }
-  | { type: 'portalWarn'; portal: number }
+  | { type: 'portalOpen'; id: number; pos: V3; kind: 'in' | 'out' }
+  | { type: 'portalClose'; id: number; kind: 'in' | 'out' }
   | { type: 'waveStart'; index: number; total: number; name: string }
   | { type: 'waveClear'; index: number }
   | { type: 'message'; text: string }

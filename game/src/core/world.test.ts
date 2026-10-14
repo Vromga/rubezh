@@ -2,17 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { ENEMIES } from '../data/enemies';
 import { SECTOR1 } from '../data/sector1';
 import { SECTOR2 } from '../data/sector2';
-import { makePortals } from './portals';
+import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng } from './rng';
-import { FLAK, World } from './world';
+import { FLAK, PORTAL, World } from './world';
 import { v3, type V3 } from './vec';
 
 const CAM = v3(0, 1.4, 0);
+const ZONE: PortalZone = { center: CAM, yaw: 0, rMin: 3.5, rMax: 3.5 };
+/** Как в игре: порталы в 7–9 м. */
+const FAR: PortalZone = { center: CAM, yaw: 0, rMin: 7, rMax: 9 };
 
-function make(opts: Partial<{ cargo: V3[]; waves: typeof SECTOR1 }> = {}): World {
-  const portals = makePortals(CAM, 0, 3.5, 0, makeRng(1));
+function make(opts: Partial<{ cargo: V3[]; waves: typeof SECTOR1; zone: PortalZone }> = {}): World {
   return new World({
-    seed: 7, floorY: 0, player: CAM, portals,
+    seed: 7, floorY: 0, player: CAM, zone: opts.zone ?? ZONE,
     cargo: opts.cargo ?? [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8)],
     waves: opts.waves ?? SECTOR1, enemyDefs: ENEMIES,
   });
@@ -30,22 +32,76 @@ function run(w: World, seconds: number, aim: (w: World) => V3 | null = () => nul
 }
 
 describe('порталы', () => {
-  it('порталы только в секторе 60° перед игроком', () => {
+  it('порталы только в секторе 60° перед игроком, на разной высоте', () => {
+    const rng = makeRng(5);
+    const heights = new Set<number>();
     for (const yaw of [0, 1, -2.5]) {
-      for (const q of makePortals(CAM, yaw, 3.5, 0, makeRng(5))) {
+      for (let i = 0; i < 20; i++) {
+        const q = pickPortalPos({ center: CAM, yaw, rMin: 9, rMax: 12 }, 0, rng);
         const a = Math.atan2(q.x - CAM.x, q.z - CAM.z);
         let d = a - yaw;
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
-        expect(Math.abs(d)).toBeLessThanOrEqual(Math.PI / 6 + 0.04);
+        expect(Math.abs(d)).toBeLessThanOrEqual(Math.PI / 6 + 1e-6);
+        const r = Math.hypot(q.x - CAM.x, q.z - CAM.z);
+        expect(r).toBeGreaterThanOrEqual(9 - 1e-6);
+        expect(r).toBeLessThanOrEqual(12 + 1e-6);
+        expect(q.y).toBeGreaterThanOrEqual(0.4);
+        expect(q.y).toBeLessThanOrEqual(2.7);
+        heights.add(Math.round(q.y * 2));
       }
     }
+    expect(heights.size).toBeGreaterThan(3);
   });
 
-  it('создаёт 5 порталов на заданном радиусе', () => {
-    const p = makePortals(CAM, 0, 3.5, 0, makeRng(3));
-    expect(p).toHaveLength(5);
-    for (const q of p) expect(Math.hypot(q.x, q.z)).toBeCloseTo(3.5, 5);
+  it('до волны порталов нет; портал открывается заранее, враг вылезает, портал закрывается', () => {
+    const w = make();
+    expect(w.portals).toHaveLength(0);
+    let opened = -1;
+    let spawnedAt = -1;
+    let openedAt = -1;
+    let closedAt = -1;
+    run(w, 30, () => null, () => {
+      for (const ev of w.drain()) {
+        if (ev.type === 'portalOpen' && ev.kind === 'in' && opened < 0) { opened = ev.id; openedAt = w.time; }
+        if (ev.type === 'portalClose' && ev.id === opened) closedAt = w.time;
+      }
+      if (spawnedAt < 0 && w.enemies.some((e) => e.portal === opened)) spawnedAt = w.time;
+      return closedAt > 0;
+    });
+    expect(openedAt).toBeGreaterThan(0);
+    expect(spawnedAt - openedAt).toBeGreaterThanOrEqual(PORTAL.lead - 0.05);
+    expect(closedAt).toBeGreaterThan(spawnedAt);
+  });
+
+  it('вор с грузом открывает красный портал ухода, влетает — портал закрывается', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5)] });
+    w.spawn('scout', 0);
+    const kinds: string[] = [];
+    run(w, 40, () => null, () => {
+      for (const ev of w.drain()) if (ev.type === 'portalOpen' || ev.type === 'portalClose') kinds.push(`${ev.type}:${ev.kind}`);
+      return w.result !== null;
+    });
+    expect(kinds).toContain('portalOpen:out');
+    expect(kinds.indexOf('portalClose:out')).toBeGreaterThan(kinds.indexOf('portalOpen:out'));
+    expect(w.stats.cargoLost).toBe(1);
+  });
+
+  it('сбитый беглец — портал ухода схлопывается', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5)] });
+    const e = w.spawn('scout', 0);
+    e.state = 'flee';
+    e.pos = v3(0, 1.4, 3);
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    const exit = w.portals.find((p) => p.kind === 'out')!;
+    expect(exit).toBeDefined();
+    e.hp = 1;
+    w.update(0.01, { firing: true, camPos: CAM, camDir: v3(e.pos.x, e.pos.y - 1.4, e.pos.z) });
+    expect(e.dead).toBe(true);
+    w.update(0.01, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(exit.state).toBe('closing');
+    run(w, 1);
+    expect(w.portals.some((p) => p.id === exit.id)).toBe(false);
   });
 });
 
@@ -157,7 +213,7 @@ describe('игрок', () => {
 
 describe('волны', () => {
   it('идеальная стрельба по всем врагам проходит сектор', () => {
-    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8), v3(1.5, 0, -1), v3(-1.5, 0, -1)] });
+    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8), v3(1.5, 0, -1), v3(-1.5, 0, -1)], zone: FAR });
     run(w, 600, (x) => {
       const t = x.enemies.find((e) => e.state !== 'emerge');
       return t ? v3(t.pos.x, t.pos.y, t.pos.z) : null;
@@ -167,7 +223,7 @@ describe('волны', () => {
   });
 
   it('сектор 2 проходим при точной стрельбе (мины и щиты учтены)', () => {
-    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8), v3(1.5, 0, -1), v3(-1.5, 0, -1)], waves: SECTOR2 });
+    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8), v3(1.5, 0, -1), v3(-1.5, 0, -1)], waves: SECTOR2, zone: FAR });
     run(w, 900, (x) => {
       const m = x.mines[0];
       if (m) return v3(m.pos.x, m.pos.y, m.pos.z);
@@ -217,7 +273,7 @@ describe('прицел', () => {
 describe('прокачка', () => {
   it('параметры зенитки и корпуса берутся из опций', () => {
     const w = new World({
-      seed: 1, floorY: 0, player: CAM, portals: makePortals(CAM, 0, 3.5, 0, makeRng(1)), cargo: [v3(1, 0, 1)],
+      seed: 1, floorY: 0, player: CAM, zone: ZONE, cargo: [v3(1, 0, 1)],
       waves: SECTOR1, enemyDefs: ENEMIES, flak: { damage: 30 }, maxHull: 150,
     });
     expect(w.player.hull).toBe(150);
@@ -232,7 +288,7 @@ describe('прокачка', () => {
 
 describe('ракеты', () => {
   const mk = () => new World({
-    seed: 1, floorY: 0, player: CAM, portals: makePortals(CAM, 0, 3.5, 0, makeRng(1)), cargo: [v3(1, 0, 1)],
+    seed: 1, floorY: 0, player: CAM, zone: ZONE, cargo: [v3(1, 0, 1)],
     waves: SECTOR1, enemyDefs: ENEMIES, weapons: { rockets: { ammo: 2 } },
   });
 
@@ -265,7 +321,7 @@ describe('ракеты', () => {
 describe('ЭМИ', () => {
   it('оглушает врагов перед игроком, сбивает сгустки, уходит на перезарядку', () => {
     const w = new World({
-      seed: 1, floorY: 0, player: CAM, portals: makePortals(CAM, 0, 3.5, 0, makeRng(1)), cargo: [v3(1, 0, 1)],
+      seed: 1, floorY: 0, player: CAM, zone: ZONE, cargo: [v3(1, 0, 1)],
       waves: SECTOR1, enemyDefs: ENEMIES, weapons: { emp: { cooldown: 10 } },
     });
     const front = w.spawn('scout', 0); front.pos = v3(0, 1.4, 4); front.state = 'seek';
@@ -285,7 +341,7 @@ describe('ЭМИ', () => {
 describe('щитоносец', () => {
   it('щит держит зенитку, ракета пробивает', () => {
     const w = new World({
-      seed: 1, floorY: 0, player: CAM, portals: makePortals(CAM, 0, 3.5, 0, makeRng(1)), cargo: [v3(1, 0, 1)],
+      seed: 1, floorY: 0, player: CAM, zone: ZONE, cargo: [v3(1, 0, 1)],
       waves: SECTOR1, enemyDefs: ENEMIES, weapons: { rockets: { ammo: 1 } },
     });
     const e = w.spawn('shield', 0);

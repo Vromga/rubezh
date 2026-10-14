@@ -1,8 +1,7 @@
 import './style.css';
 import './screens.css';
 import * as THREE from 'three';
-import { makePortals } from './core/portals';
-import { makeRng } from './core/rng';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { GameEvent } from './core/types';
 import { World } from './core/world';
 import { v3, type V3 } from './core/vec';
@@ -28,6 +27,9 @@ renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.xr.enabled = true;
 const scene = new THREE.Scene();
+// отражения «комнаты» на металле роботов
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.9;
 const demoCam = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 60);
 demoCam.position.set(0, DEMO_EYE, 0);
 
@@ -270,10 +272,10 @@ function startBattle(): void {
   const radius = Math.min(12, Math.max(9, maxR + 6));
   const yaw0 = Math.atan2(cam.dir.x, cam.dir.z);
   const seed = Date.now() & 0xffff;
-  const portals = makePortals(v3(cam.pos.x, cam.pos.y, cam.pos.z), yaw0, radius, floorY, makeRng(seed));
+  const zone = { center: v3(cam.pos.x, cam.pos.y, cam.pos.z), yaw: yaw0, rMin: radius - 2, rMax: radius };
   const sec = SECTORS.find((x) => x.id === curSector)!;
   world = new World({
-    seed, floorY, player: v3(cam.pos.x, cam.pos.y, cam.pos.z), cargo: cargoPos, portals,
+    seed, floorY, player: v3(cam.pos.x, cam.pos.y, cam.pos.z), cargo: cargoPos, zone,
     waves: sec.waves!, enemyDefs: ENEMIES, front: yaw0,
     flak: flakStats(screens.save), maxHull: maxHull(screens.save), weapons: weaponOpts(screens.save),
   });
@@ -335,10 +337,11 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
         sfx.alarm();
         transient.push({ id: `t${ev.enemyId}`, pos: ev.pos, ttl: 0.9, danger: true });
         break;
-      case 'portalWarn':
-        sfx.portal();
-        transient.push({ id: `p${ev.portal}`, pos: w.portals[ev.portal], ttl: 2.5, danger: false });
+      case 'portalOpen':
+        sfx.portal(ev.kind);
+        transient.push({ id: `p${ev.id}`, pos: ev.pos, ttl: 2.5, danger: ev.kind === 'out' });
         break;
+      case 'portalClose': sfx.portalClose(); break;
       case 'cargoGrabbed': sfx.steal(); hud.say('Груз похищают! Сбей вора!', 2500); break;
       case 'cargoDropped': hud.say('Груз упал — цел.', 2000); break;
       case 'cargoLost': sfx.lost(); hud.say('Груз потерян!', 2500); break;
