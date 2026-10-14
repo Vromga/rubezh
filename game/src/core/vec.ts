@@ -36,3 +36,20 @@ export function raySphere(o: V3, d: V3, c: V3, r: number): number | null {
   const thc = Math.sqrt(r * r - d2);
   return Math.max(tca - thc, 0.05);
 }
+
+/**
+ * Луч против отрезка-«трубки» радиуса r: расстояние t по лучу или null.
+ * Для тросов гарпуна.
+ */
+export function raySegment(o: V3, d: V3, a: V3, b: V3, r: number): number | null {
+  const u = sub(b, a);
+  const w0 = sub(o, a);
+  const A = dot(d, d), B = dot(d, u), C = dot(u, u), D = dot(d, w0), E = dot(u, w0);
+  const den = A * C - B * B;
+  // ближайшая точка отрезка к лучу, затем её проекция на луч
+  const s = Math.max(0, Math.min(1, den > 1e-9 ? (A * E - B * D) / den : 0));
+  const t = Math.max(0, (dot(add(a, mul(u, s)), d) - dot(o, d)) / A);
+  const pRay = add(o, mul(d, t));
+  const pSeg = add(a, mul(u, s));
+  return dist(pRay, pSeg) <= r ? Math.max(t, 0.05) : null;
+}

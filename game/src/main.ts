@@ -13,6 +13,7 @@ import { Sfx } from './audio/sfx';
 import { buildCargo } from './render/meshes';
 import { GunRig } from './render/guns';
 import { Stage } from './render/stage';
+import { AcidLayer } from './ui/acid';
 import { CrackLayer } from './ui/cracks';
 import { Hud, type EndChoice, type Indicator } from './ui/hud';
 
@@ -36,6 +37,7 @@ demoCam.position.set(0, DEMO_EYE, 0);
 const ov = $('ov');
 const hud = new Hud($('hud'));
 const cracks = new CrackLayer($('cracks') as HTMLCanvasElement);
+const acid = new AcidLayer($('acid'));
 const sfx = new Sfx();
 const screens = new Screens($('screens'), loadSave(), {
   startAR: (n) => void startAR(n),
@@ -295,7 +297,8 @@ function startBattle(): void {
   ended = false;
   transient.length = 0;
   phase = 'battle';
-  hud.setNight(curSector === 3);
+  hud.setNight(curSector === 3 || curSector === 4);
+  acid.clear();
   hud.say('Мара: порталы откроются перед тобой. Стрелки по краям подскажут, откуда угроза.', 6000);
 }
 
@@ -366,10 +369,25 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
         break;
       case 'blink': sfx.blink(); break;
       case 'cloakBroken': hud.say('Генератор невидимости разбит — больше не скроется!', 2500); break;
+      case 'tether': sfx.alarm(); hud.say('Трос! Перебей его очередью!', 2000); break;
+      case 'tetherCut': hud.say('Трос перебит — груз падает.', 1800); break;
+      case 'acidHit': acid.splat(); sfx.glass(0.3); break;
+      case 'brood': hud.say(`Матка выпустила жуков: ${ev.n}`, 1500); break;
+      case 'shake': shake(ev.power); break;
       case 'end': finish(ev); break;
       default: break;
     }
   }
+}
+
+/** Тряска кабины (шаги левиафана, взрывы сапёров). */
+function shake(power: number): void {
+  if (!screens.save.settings.cracks) return;
+  ov.classList.remove('shake', 'big');
+  void ov.offsetWidth;
+  ov.classList.add('shake');
+  if (power > 0.6) ov.classList.add('big');
+  if (screens.save.settings.vibration) navigator.vibrate?.(Math.round(30 + power * 90));
 }
 
 function finish(ev: Extract<GameEvent, { type: 'end' }>): void {

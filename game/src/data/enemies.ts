@@ -108,4 +108,73 @@ export const ENEMIES: Record<string, EnemyDef> = {
       { id: 'engR', kind: 'engine', hp: 140, off: v3(0.55, 0.05, -0.2), r: 0.16 },
     ],
   },
+  crab: {
+    id: 'crab', name: 'Танк-краб', cls: 'H', hp: 150, speed: 0.45, radius: 0.5, behavior: 'thief', reward: 26, scale: S, walk: 0.22,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.25 },
+      { id: 'shell', kind: 'shield', hp: 90, off: v3(0, 0.1, 0.2), r: 0.3 },
+      { id: 'claw', kind: 'grabber', hp: 40, off: v3(0.18, 0, 0.3), r: 0.12 },
+      { id: 'legL', kind: 'engine', hp: 35, off: v3(-0.3, -0.12, 0), r: 0.12 },
+      { id: 'legR', kind: 'engine', hp: 35, off: v3(0.3, -0.12, 0), r: 0.12 },
+    ],
+  },
+  harpooner: {
+    id: 'harpooner', name: 'Гарпунщик', cls: 'H', hp: 90, speed: 0.55, radius: 0.45, behavior: 'harpoon', reward: 24, scale: S,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.22 },
+      { id: 'gun', kind: 'grabber', hp: 30, off: v3(0, -0.12, 0.28), r: 0.12 },
+      { id: 'engL', kind: 'engine', hp: 25, off: v3(-0.3, 0.02, -0.05), r: 0.11 },
+      { id: 'engR', kind: 'engine', hp: 25, off: v3(0.3, 0.02, -0.05), r: 0.11 },
+    ],
+  },
+  hive: {
+    id: 'hive', name: 'Рой-матка', cls: 'H', hp: 140, speed: 0.4, radius: 0.6, behavior: 'hive', reward: 30, scale: S,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.3 },
+      { id: 'sacL', kind: 'sensor', hp: 30, off: v3(-0.26, -0.16, 0.05), r: 0.13 },
+      { id: 'sacR', kind: 'sensor', hp: 30, off: v3(0.26, -0.16, 0.05), r: 0.13 },
+      { id: 'rotor', kind: 'engine', hp: 40, off: v3(0, 0.3, 0), r: 0.22 },
+    ],
+  },
+  sapper: {
+    id: 'sapper', name: 'Сапёр', cls: 'H', hp: 90, speed: 0.35, radius: 0.45, behavior: 'kamikaze', reward: 20, scale: S,
+    contactDamage: 35, blast: { r: 1.6, dmg: 40 },
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.26 },
+      { id: 'charge', kind: 'sensor', hp: 25, off: v3(0, 0.02, 0.26), r: 0.12 },
+      { id: 'jetL', kind: 'engine', hp: 25, off: v3(-0.28, 0, -0.1), r: 0.1 },
+      { id: 'jetR', kind: 'engine', hp: 25, off: v3(0.28, 0, -0.1), r: 0.1 },
+    ],
+  },
+  spitter: {
+    id: 'spitter', name: 'Кислотник', cls: 'H', hp: 75, speed: 0.6, radius: 0.42, behavior: 'acid', reward: 22, scale: S,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.22 },
+      { id: 'mouth', kind: 'weapon', hp: 22, off: v3(0, -0.06, 0.26), r: 0.11 },
+      { id: 'wingL', kind: 'engine', hp: 20, off: v3(-0.28, 0.06, -0.04), r: 0.12 },
+      { id: 'wingR', kind: 'engine', hp: 20, off: v3(0.28, 0.06, -0.04), r: 0.12 },
+    ],
+  },
+  leviathan: {
+    id: 'leviathan', name: 'Левиафан', cls: 'H', hp: 320, speed: 0.28, radius: 0.9, behavior: 'stomper', reward: 45, scale: S * 1.5, walk: 0.6,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.42 },
+      { id: 'head', kind: 'sensor', hp: 60, off: v3(0, 0.12, 0.48), r: 0.17 },
+      { id: 'legFL', kind: 'engine', hp: 60, off: v3(-0.42, -0.3, 0.3), r: 0.14 },
+      { id: 'legFR', kind: 'engine', hp: 60, off: v3(0.42, -0.3, 0.3), r: 0.14 },
+      { id: 'legBL', kind: 'engine', hp: 60, off: v3(-0.42, -0.3, -0.3), r: 0.14 },
+      { id: 'legBR', kind: 'engine', hp: 60, off: v3(0.42, -0.3, -0.3), r: 0.14 },
+    ],
+  },
+  reaper: {
+    id: 'reaper', name: 'Жнец', cls: 'B', hp: 800, speed: 0.4, radius: 1.0, behavior: 'reaper', reward: 250, scale: S * 1.5,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.55 },
+      { id: 'hold', kind: 'grabber', hp: 160, off: v3(0, -0.3, 0), r: 0.25 },
+      { id: 'gunL', kind: 'weapon', hp: 120, off: v3(-0.55, -0.1, 0.35), r: 0.14 },
+      { id: 'gunR', kind: 'weapon', hp: 120, off: v3(0.55, -0.1, 0.35), r: 0.14 },
+      { id: 'engL', kind: 'engine', hp: 220, off: v3(-0.72, 0.1, -0.35), r: 0.18 },
+      { id: 'engR', kind: 'engine', hp: 220, off: v3(0.72, 0.1, -0.35), r: 0.18 },
+    ],
+  },
 };

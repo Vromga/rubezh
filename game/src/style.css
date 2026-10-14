@@ -162,3 +162,15 @@ html.ar .slot.jam { filter: none; }
   .end .row .grow { display: none; }
   .end .row button { flex: 1 1 40%; padding: 12px 10px; }
 }
+
+/* сектор 4: кислота на стекле и тряска */
+#acid { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+#acid i { position: absolute; transform: translate(-50%, -50%); border-radius: 46% 54% 60% 40% / 50% 42% 58% 50%;
+  background: radial-gradient(circle at 40% 35%, #d8ff8acc, #8aff3a99 35%, #3a8a1a77 65%, transparent 72%);
+  animation: acid 8s ease-in forwards; }
+@keyframes acid { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); } 6% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70% { opacity: .85; } 100% { opacity: 0; transform: translate(-50%, -30%) scale(1.05, 1.4); } }
+#ov.shake { animation: shake .35s linear; }
+#ov.shake.big { animation: shake-big .6s linear; }
+@keyframes shake { 25% { transform: translate(4px, -3px); } 50% { transform: translate(-4px, 2px); } 75% { transform: translate(2px, 3px); } }
+@keyframes shake-big { 15% { transform: translate(10px, -6px); } 30% { transform: translate(-9px, 5px); } 45% { transform: translate(7px, 6px); } 60% { transform: translate(-6px, -4px); } 80% { transform: translate(3px, 2px); } }

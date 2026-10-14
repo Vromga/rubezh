@@ -1,7 +1,8 @@
 import type { V3 } from './vec';
 
 export type PartKind = 'core' | 'armor' | 'engine' | 'weapon' | 'grabber' | 'sensor' | 'shield';
-export type Behavior = 'thief' | 'kamikaze' | 'shooter' | 'bomber' | 'jammer' | 'repair' | 'boss';
+export type Behavior = 'thief' | 'kamikaze' | 'shooter' | 'bomber' | 'jammer' | 'repair' | 'boss'
+  | 'harpoon' | 'hive' | 'acid' | 'stomper' | 'reaper';
 
 export interface PartDef { id: string; kind: PartKind; hp: number; off: V3; r: number }
 
@@ -24,11 +25,16 @@ export interface EnemyDef {
   blink?: boolean;
   /** невидимость циклами: сколько секунд скрыт / виден */
   cloak?: { hidden: number; shown: number };
+  /** ходит по полу: высота корпуса над полом, м (порталы — на полу) */
+  walk?: number;
+  /** взрыв при гибели: радиус и урон по соседям */
+  blast?: { r: number; dmg: number };
 }
 
 export interface PartState { def: PartDef; hp: number; alive: boolean }
 
-export type EnemyState = 'emerge' | 'seek' | 'carry' | 'flee' | 'orbit' | 'attack' | 'bomb' | 'jam' | 'repair' | 'boss';
+export type EnemyState = 'emerge' | 'seek' | 'carry' | 'flee' | 'orbit' | 'attack' | 'bomb' | 'jam' | 'repair' | 'boss'
+  | 'harpoon' | 'reel' | 'hive' | 'acid' | 'stomp' | 'reaper';
 
 export interface Enemy {
   id: number;
@@ -79,7 +85,12 @@ export interface Portal {
   owner: number | null;
   /** для 'in' — когда закрыться (время мира) */
   closeAt: number;
+  /** лежит на полу (для шагающих) */
+  floor?: boolean;
 }
+
+/** Трос гарпуна / луч захвата: тянет груз к врагу; перебивается стрельбой. */
+export interface Tether { id: number; enemyId: number; cargoId: number; hp: number }
 
 export interface Cargo {
   id: number;
@@ -93,7 +104,7 @@ export interface Rocket { id: number; pos: V3; vel: V3; target: number | null; l
 
 export interface Mine { id: number; pos: V3; vy: number }
 
-export interface Bolt { id: number; pos: V3; vel: V3; life: number; from: V3 }
+export interface Bolt { id: number; pos: V3; vel: V3; life: number; from: V3; acid?: boolean }
 
 export interface SpawnDef { t: number; enemy: string; portal?: number }
 export interface WaveDef { name: string; hint: string; spawns: SpawnDef[] }
@@ -117,6 +128,11 @@ export type GameEvent =
   | { type: 'jam'; pos: V3 }
   | { type: 'blink'; enemyId: number; from: V3; to: V3 }
   | { type: 'cloakBroken'; enemyId: number }
+  | { type: 'tether'; enemyId: number; cargoId: number }
+  | { type: 'tetherCut'; pos: V3 }
+  | { type: 'acidHit' }
+  | { type: 'shake'; power: number }
+  | { type: 'brood'; pos: V3; n: number }
   | { type: 'waveStart'; index: number; total: number; name: string }
   | { type: 'waveClear'; index: number }
   | { type: 'message'; text: string }

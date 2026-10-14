@@ -1,10 +1,11 @@
+import { stepAcid, stepHarpoon, stepHive, stepReaper, stepStomper, updateTethers } from './heavy';
 import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng, type Rng } from './rng';
 import type {
-  Bolt, Cargo, Enemy, EnemyDef, GameEvent, Mine, PartState, Portal, Rocket, WaveDef,
+  Bolt, Cargo, Enemy, EnemyDef, GameEvent, Mine, PartState, Portal, Rocket, Tether, WaveDef,
 } from './types';
 import {
-  add, clone, dist, distXZ, dot, mul, norm, raySphere, rotY, sub, v3, wrapAngle, type V3,
+  add, clone, dist, distXZ, dot, mul, norm, raySegment, raySphere, rotY, sub, v3, wrapAngle, type V3,
 } from './vec';
 
 export interface Input {
@@ -49,8 +50,9 @@ export const FLAK = {
 };
 
 const HULL = 100;
-const BOLT_SPEED = 1.6;
+export const BOLT_SPEED = 1.6;
 const BOLT_DAMAGE = 8;
+export const ACID = { damage: 5, speed: 1.4 };
 const SPARK_DAMAGE = 12;
 
 export const ROCKET = { lockTime: 0.6, speed0: 3, speed1: 8, turn: 5, damage: 45, splash: 1.3, splashDamage: 22, life: 5 };
@@ -79,6 +81,7 @@ export class World {
   bolts: Bolt[] = [];
   rockets: Rocket[] = [];
   mines: Mine[] = [];
+  tethers: Tether[] = [];
   /** состояние доп. оружия; null — не взято в бой */
   rocketState: { ammo: number; lockT: number; lockId: number | null; locked: boolean } | null = null;
   empState: { cd: number; cooldown: number } | null = null;
@@ -96,13 +99,13 @@ export class World {
   phase: 'intermission' | 'wave' | 'done' = 'intermission';
   result: 'win' | 'lose' | null = null;
 
-  private rng: Rng;
-  private nextId = 1;
-  private pending: Pending[] = [];
+  /** @internal */ rng: Rng;
+  /** @internal */ nextId = 1;
+  /** @internal */ pending: Pending[] = [];
   private phaseT = 2;
   private waves: WaveDef[];
   private defs: Record<string, EnemyDef>;
-  private front: number;
+  /** @internal */ front: number;
   private zone: PortalZone;
 
   constructor(o: WorldOptions) {
@@ -146,6 +149,7 @@ export class World {
     this.updateWaves(dt);
     for (const e of this.enemies) if (!e.dead) this.stepEnemy(e, dt);
     this.updatePortals(dt);
+    updateTethers(this, dt);
     this.updateBolts(dt);
     this.updateMines(dt);
     this.updateCargo(dt);
@@ -181,11 +185,12 @@ export class World {
   }
 
   /** Что окажется на линии огня (без разброса): для прицела и для выстрела. */
-  pick(origin: V3, d: V3): { enemy: Enemy | null; bolt: Bolt | null; mine?: Mine | null; t: number } | null {
+  pick(origin: V3, d: V3): { enemy: Enemy | null; bolt: Bolt | null; mine?: Mine | null; tether?: Tether | null; t: number } | null {
     let bestT = Infinity;
     let enemy: Enemy | null = null;
     let bolt: Bolt | null = null;
     let mine: Mine | null = null;
+    let tether: Tether | null = null;
     for (const e of this.enemies) {
       if (!this.targetable(e)) continue;
       const t = raySphere(origin, d, e.pos, e.def.radius * (e.def.scale ?? 1) * this.flak.aimAssist);
@@ -199,7 +204,13 @@ export class World {
       const t = raySphere(origin, d, m.pos, 0.2);
       if (t !== null && t < bestT) { bestT = t; mine = m; bolt = null; enemy = null; }
     }
-    return enemy || bolt || mine ? { enemy, bolt, mine, t: bestT } : null;
+    for (const th of this.tethers) {
+      const ends = this.tetherEnds(th);
+      if (!ends) continue;
+      const t = raySegment(origin, d, ends[0], ends[1], 0.12);
+      if (t !== null && t < bestT) { bestT = t; tether = th; mine = null; bolt = null; enemy = null; }
+    }
+    return enemy || bolt || mine || tether ? { enemy, bolt, mine, tether, t: bestT } : null;
   }
 
   private shoot(origin: V3, dir0: V3): void {
@@ -212,6 +223,15 @@ export class World {
     const hitEnemy = hit?.enemy ?? null;
     const hitBolt = hit?.bolt ?? null;
     const hitMine = hit?.mine ?? null;
+    const hitTether = hit?.tether ?? null;
+    if (hitTether) {
+      const point = add(origin, mul(d, bestT));
+      this.events.push({ type: 'shot', origin: clone(origin), end: point, hit: true });
+      this.stats.hits++;
+      hitTether.hp -= this.flak.damage;
+      if (hitTether.hp <= 0) this.cutTether(hitTether, point);
+      return;
+    }
     if (hitMine) {
       this.mines = this.mines.filter((m) => m !== hitMine);
       this.events.push({ type: 'boltShot', pos: clone(hitMine.pos) });
@@ -239,6 +259,27 @@ export class World {
     this.events.push({ type: 'shot', origin: clone(origin), end: add(origin, mul(d, 10)), hit: false });
   }
 
+  /** Концы троса: орудие врага и груз. */
+  tetherEnds(th: Tether): [V3, V3] | null {
+    const e = this.enemies.find((x) => x.id === th.enemyId && !x.dead);
+    const c = this.cargoOf(th.cargoId);
+    if (!e || !c) return null;
+    const gun = e.parts.find((p) => p.def.kind === 'grabber' && p.alive) ?? e.parts[0];
+    return [this.partWorld(e, gun), add(c.pos, v3(0, 0.12, 0))];
+  }
+
+  /** Трос перебит: груз падает целым. */
+  cutTether(th: Tether, at: V3): void {
+    this.tethers = this.tethers.filter((x) => x !== th);
+    const e = this.enemies.find((x) => x.id === th.enemyId);
+    if (e && e.cargoId === th.cargoId) {
+      this.dropCargo(e);
+      if (e.state === 'reel') e.state = e.def.behavior === 'reaper' ? 'reaper' : 'harpoon';
+      e.fireCd = Math.max(e.fireCd, 3);
+    }
+    this.events.push({ type: 'tetherCut', pos: clone(at) });
+  }
+
   /** В невидимого врага нельзя прицелиться (но взрыв ракеты задевает). */
   targetable(e: Enemy): boolean {
     return !e.dead && e.cloak < 0.6;
@@ -259,7 +300,7 @@ export class World {
     return best;
   }
 
-  private damage(e: Enemy, part: PartState, dmg: number, point: V3, pierce = false): void {
+  /** @internal */ damage(e: Enemy, part: PartState, dmg: number, point: V3, pierce = false): void {
     // фронтальный щит принимает на себя всё, кроме ракет
     const shield = e.parts.find((p) => p.def.kind === 'shield' && p.alive);
     if (shield && !pierce) part = shield;
@@ -287,6 +328,7 @@ export class World {
 
   private onPartDestroyed(e: Enemy, part: PartState): void {
     if (part.def.kind === 'grabber') {
+      for (const th of this.tethers.filter((x) => x.enemyId === e.id)) this.cutTether(th, this.partWorld(e, part));
       this.dropCargo(e);
       if (e.state === 'seek' || e.state === 'carry') e.state = 'flee';
     }
@@ -301,10 +343,12 @@ export class World {
     }
   }
 
-  private kill(e: Enemy, byPlayer: boolean): void {
+  /** @internal */ kill(e: Enemy, byPlayer: boolean): void {
     if (e.dead) return;
     e.dead = true;
+    for (const th of this.tethers.filter((x) => x.enemyId === e.id)) this.cutTether(th, e.pos);
     this.dropCargo(e);
+    if (e.def.blast) this.blast(e);
     if (byPlayer) {
       this.stats.kills++;
       this.killsBy[e.def.id] = (this.killsBy[e.def.id] ?? 0) + 1;
@@ -313,6 +357,18 @@ export class World {
     const size = e.def.cls === 'L' ? 0.5 : e.def.cls === 'M' ? 0.9 : 1.4;
     this.events.push({ type: 'enemyKilled', enemyId: e.id, pos: clone(e.pos), reward: byPlayer ? e.def.reward : 0, defId: e.def.id, byPlayer });
     this.events.push({ type: 'explosion', pos: clone(e.pos), size });
+  }
+
+  /** Взрыв сапёра: задевает соседей и, если близко, стекло. */
+  private blast(e: Enemy): void {
+    const b = e.def.blast!;
+    for (const o of this.enemies) {
+      if (o === e || o.dead || dist(o.pos, e.pos) > b.r) continue;
+      this.damage(o, this.nearestPart(o, e.pos), b.dmg, e.pos, true);
+    }
+    if (dist(this.player.pos, e.pos) < b.r) this.hurt(Math.round(b.dmg / 3), e.pos);
+    this.events.push({ type: 'explosion', pos: clone(e.pos), size: 1.8 });
+    this.events.push({ type: 'shake', power: 0.7 });
   }
 
   // ───── волны ─────
@@ -327,7 +383,7 @@ export class World {
     // портал открывается заранее, враг вылезает из него в назначенное время
     for (const p of this.pending) {
       if (p.portalId === null && this.time >= p.at - PORTAL.lead) {
-        p.portalId = this.openPortal('in', null, p.lane).id;
+        p.portalId = this.openPortal('in', null, p.lane, !!this.defs[p.enemy].walk).id;
       }
     }
     const due = this.pending.filter((p) => this.time >= p.at);
@@ -360,19 +416,26 @@ export class World {
   }
 
   /** Враг вылезает из портала portalId (если его нет — портал открывается сразу). */
-  spawn(defId: string, portalId = -1): Enemy {
+  spawn(defId: string, portalId = -1, at?: V3): Enemy {
     const def = this.defs[defId];
     this.seen.add(defId);
-    let portal = this.portals.find((q) => q.id === portalId && q.kind === 'in');
-    if (!portal) {
-      portal = this.openPortal('in', null);
-      portal.state = 'open';
+    let start: V3;
+    let portalRef = -1;
+    if (at) start = clone(at); // выводок матки — без портала
+    else {
+      let portal = this.portals.find((q) => q.id === portalId && q.kind === 'in');
+      if (!portal) {
+        portal = this.openPortal('in', null, undefined, !!def.walk);
+        portal.state = 'open';
+      }
+      portal.closeAt = this.time + PORTAL.linger;
+      portalRef = portal.id;
+      start = def.walk ? v3(portal.pos.x, this.floorY - 0.4, portal.pos.z) : clone(portal.pos);
     }
-    portal.closeAt = this.time + PORTAL.linger;
     const e: Enemy = {
-      id: this.nextId++, def, pos: clone(portal.pos), vel: v3(), yaw: 0, hp: def.hp,
+      id: this.nextId++, def, pos: start, vel: v3(), yaw: 0, hp: def.hp,
       parts: def.parts.map((p) => ({ def: p, hp: p.hp, alive: true })),
-      state: 'emerge', t: 0, portal: portal.id, cargoId: null, targetCargo: null,
+      state: 'emerge', t: 0, portal: portalRef, cargoId: null, targetCargo: null,
       fireCd: 2 + this.rng(), orbitAng: this.rng() * Math.PI * 2, falling: false, dead: false, stun: 0,
       exitId: null, cloak: 0, reveal: 0, noCloak: false, blinkCd: BLINK.period * (0.6 + 0.4 * this.rng()),
       beamTo: null, phaseT: 0, cycle: 0,
@@ -392,8 +455,13 @@ export class World {
       // вылезает из портала в сторону игрока
       const out = norm(sub(this.player.pos, e.pos));
       e.pos = add(e.pos, mul(v3(out.x, 0, out.z), 0.9 * dt));
+      // шагающий вылезает из портала в полу
+      if (e.def.walk) e.pos.y = Math.min(this.floorY + e.def.walk, e.pos.y + (e.def.walk + 0.4) * dt / 0.7);
       if (e.t >= 0.7) {
-        const first: Record<string, Enemy['state']> = { shooter: 'orbit', kamikaze: 'attack', bomber: 'bomb', jammer: 'jam', repair: 'repair', boss: 'boss' };
+        const first: Record<string, Enemy['state']> = {
+          shooter: 'orbit', kamikaze: 'attack', bomber: 'bomb', jammer: 'jam', repair: 'repair', boss: 'boss',
+          harpoon: 'harpoon', hive: 'hive', acid: 'acid', stomper: 'stomp', reaper: 'reaper',
+        };
         e.state = first[e.def.behavior] ?? 'seek';
       }
       return;
@@ -401,13 +469,19 @@ export class World {
     const engines = e.parts.filter((p) => p.def.kind === 'engine');
     const lost = engines.filter((p) => !p.alive).length;
     if (engines.length > 0 && lost === engines.length) e.falling = true;
+    if (e.falling && e.def.walk) {
+      // шагающий без ног оседает и разваливается
+      e.pos.y -= dt * 0.6;
+      if (e.pos.y <= this.floorY + 0.08) this.kill(e, true);
+      return;
+    }
     if (e.falling) {
       e.vel.y -= 5 * dt;
       e.pos.x += e.vel.x * 0.4 * dt;
       e.pos.z += e.vel.z * 0.4 * dt;
       e.pos.y += e.vel.y * dt;
       // разбился: награды нет (кроме босса)
-      if (e.pos.y <= this.floorY + 0.08) this.kill(e, e.def.cls === 'B');
+      if (e.pos.y <= this.floorY + 0.08) this.kill(e, e.def.cls === 'B' || !!e.def.walk);
       return;
     }
     const speed = e.def.speed * (1 - (engines.length ? 0.45 * (lost / engines.length) : 0));
@@ -421,11 +495,20 @@ export class World {
       case 'jam': this.stepJam(e, speed, dt); break;
       case 'repair': this.stepRepair(e, speed, dt); break;
       case 'boss': this.stepBoss(e, speed, dt); break;
+      case 'harpoon': case 'reel': stepHarpoon(this, e, speed, dt); break;
+      case 'hive': stepHive(this, e, speed, dt); break;
+      case 'acid': stepAcid(this, e, speed, dt); break;
+      case 'stomp': stepStomper(this, e, speed, dt); break;
+      case 'reaper': stepReaper(this, e, speed, dt); break;
       default: break;
     }
   }
 
-  private flyTo(e: Enemy, target: V3, speed: number, dt: number, wobble = 0.4): void {
+  /** @internal */ flyTo(e: Enemy, target: V3, speed: number, dt: number, wobble = 0.4): void {
+    if (e.def.walk) {
+      target = v3(target.x, this.floorY + e.def.walk, target.z);
+      wobble = 0;
+    }
     const dir = norm(sub(target, e.pos));
     const side = v3(dir.z, 0, -dir.x);
     const w = Math.sin(e.t * 3 + e.id) * wobble * speed;
@@ -439,7 +522,7 @@ export class World {
     }
   }
 
-  private cargoOf(id: number | null): Cargo | undefined {
+  /** @internal */ cargoOf(id: number | null): Cargo | undefined {
     return id === null ? undefined : this.cargo.find((c) => c.id === id);
   }
 
@@ -453,7 +536,7 @@ export class World {
     const target = v3(c.pos.x, c.pos.y + 0.4, c.pos.z);
     this.tryBlink(e, target, dt);
     this.flyTo(e, target, speed, dt);
-    if (distXZ(e.pos, target) < 0.22 && Math.abs(e.pos.y - target.y) < 0.25) {
+    if (distXZ(e.pos, target) < (e.def.walk ? 0.35 : 0.22) && (e.def.walk || Math.abs(e.pos.y - target.y) < 0.25)) {
       c.state = 'carried';
       e.cargoId = c.id;
       e.state = 'carry';
@@ -466,7 +549,7 @@ export class World {
     const p = exit.pos;
     this.tryBlink(e, p, dt);
     this.flyTo(e, p, speed, dt, 0.15);
-    if (dist(e.pos, p) < PORTAL.enter && exit.state !== 'opening') {
+    if ((e.def.walk ? distXZ(e.pos, p) : dist(e.pos, p)) < PORTAL.enter && exit.state !== 'opening') {
       this.closePortal(exit);
       const c = this.cargoOf(e.cargoId);
       if (c) {
@@ -484,7 +567,7 @@ export class World {
     const exit = this.exitFor(e);
     const p = exit.pos;
     this.flyTo(e, p, speed * 1.3, dt, 0.2);
-    if (dist(e.pos, p) < PORTAL.enter && exit.state !== 'opening') {
+    if ((e.def.walk ? distXZ(e.pos, p) : dist(e.pos, p)) < PORTAL.enter && exit.state !== 'opening') {
       this.closePortal(exit);
       e.dead = true;
       this.events.push({ type: 'enemyEscaped', enemyId: e.id });
@@ -577,13 +660,13 @@ export class World {
   }
 
   /** Точка «висения» перед игроком: дуга ±30°, расстояние r. */
-  private hoverPoint(e: Enemy, r: number, dy: number): V3 {
+  /** @internal */ hoverPoint(e: Enemy, r: number, dy: number): V3 {
     const p = this.player.pos;
     const a = this.front + Math.sin(e.orbitAng) * 0.5;
     return v3(p.x + Math.sin(a) * r, p.y + dy + Math.sin(e.t * 0.9) * 0.2, p.z + Math.cos(a) * r);
   }
 
-  private faceTo(e: Enemy, at: V3, dt: number): void {
+  /** @internal */ faceTo(e: Enemy, at: V3, dt: number): void {
     e.yaw += wrapAngle(Math.atan2(at.x - e.pos.x, at.z - e.pos.z) - e.yaw) * Math.min(1, dt * 4);
   }
 
@@ -687,7 +770,7 @@ export class World {
     }
   }
 
-  private nearestIdleCargo(from: V3): Cargo | undefined {
+  /** @internal */ nearestIdleCargo(from: V3): Cargo | undefined {
     let best: Cargo | undefined;
     let bd = Infinity;
     for (const c of this.cargo) {
@@ -700,12 +783,13 @@ export class World {
 
   // ───── порталы ─────
 
-  private openPortal(kind: 'in' | 'out', owner: number | null, lane?: number): Portal {
+  /** @internal */ openPortal(kind: 'in' | 'out', owner: number | null, lane?: number, floor = false): Portal {
     const avoid = this.portals.map((q) => q.pos);
-    const pos = pickPortalPos(this.zone, this.floorY, this.rng, avoid, lane);
+    const pos = pickPortalPos(floor ? { ...this.zone, rMin: Math.min(this.zone.rMin, 6), rMax: Math.min(this.zone.rMax, 7.5) } : this.zone, this.floorY, this.rng, avoid, lane);
+    if (floor) pos.y = this.floorY + 0.02;
     // страховка: портал вторжения не висит дольше, чем нужно врагу, чтобы вылезти
     const closeAt = kind === 'in' ? this.time + PORTAL.lead + PORTAL.linger + 1 : Infinity;
-    const p: Portal = { id: this.nextId++, pos, kind, state: 'opening', t: 0, owner, closeAt };
+    const p: Portal = { id: this.nextId++, pos, kind, state: 'opening', t: 0, owner, closeAt, floor };
     this.portals.push(p);
     this.events.push({ type: 'portalOpen', id: p.id, pos: clone(pos), kind });
     return p;
@@ -719,10 +803,10 @@ export class World {
   }
 
   /** Портал ухода врага: открывается, когда враг решил уйти. */
-  private exitFor(e: Enemy): Portal {
+  /** @internal */ exitFor(e: Enemy): Portal {
     let p = this.portals.find((q) => q.id === e.exitId && q.state !== 'closing');
     if (!p) {
-      p = this.openPortal('out', e.id);
+      p = this.openPortal('out', e.id, undefined, !!e.def.walk);
       e.exitId = p.id;
     }
     return p;
@@ -743,7 +827,7 @@ export class World {
     this.portals = this.portals.filter((p) => !(p.state === 'closing' && p.t >= PORTAL.close));
   }
 
-  private dropCargo(e: Enemy): void {
+  /** @internal */ dropCargo(e: Enemy): void {
     const c = this.cargoOf(e.cargoId);
     e.cargoId = null;
     if (c && c.state === 'carried') {
@@ -850,7 +934,8 @@ export class World {
       b.life -= dt;
       if (dist(b.pos, this.player.pos) < 0.35) {
         b.life = 0;
-        this.hurt(BOLT_DAMAGE, b.from);
+        this.hurt(b.acid ? ACID.damage : BOLT_DAMAGE, b.from);
+        if (b.acid) this.events.push({ type: 'acidHit' });
       }
     }
     this.bolts = this.bolts.filter((b) => b.life > 0);
@@ -860,7 +945,7 @@ export class World {
     for (const c of this.cargo) {
       if (c.state === 'carried') {
         const e = this.enemies.find((x) => x.cargoId === c.id && !x.dead);
-        if (e) c.pos = v3(e.pos.x, e.pos.y - 0.4, e.pos.z);
+        if (e && !this.tethers.some((t) => t.cargoId === c.id)) c.pos = e.def.walk ? v3(e.pos.x, e.pos.y + 0.3, e.pos.z) : v3(e.pos.x, e.pos.y - 0.4, e.pos.z);
       } else if (c.state === 'falling') {
         c.vy -= 6 * dt;
         c.pos.y += c.vy * dt;

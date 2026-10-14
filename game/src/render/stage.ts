@@ -31,6 +31,10 @@ export class Stage {
   private boltMat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
   private rocketMeshes = new Map<number, THREE.Group>();
   private mineMeshes = new Map<number, THREE.Mesh>();
+  private acidMat = new THREE.MeshBasicMaterial({ color: 0x8aff3a });
+  private tetherMeshes = new Map<number, THREE.Mesh>();
+  private tetherMat = new THREE.MeshBasicMaterial({ color: 0xd8e2ec });
+  private beamMat = new THREE.MeshBasicMaterial({ color: 0x38e1ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
   private mineGeo = new THREE.SphereGeometry(0.06, 10, 8);
   private mineMat = new THREE.MeshBasicMaterial({ color: 0xffa020 });
   private t = 0;
@@ -95,6 +99,8 @@ export class Stage {
           this.fx.sparks(toV(ev.from), 12, [0.75, 0.45, 1]);
           this.fx.sparks(toV(ev.to), 12, [0.75, 0.45, 1]);
           break;
+        case 'tetherCut': this.fx.sparks(toV(ev.pos), 14, [1, 0.9, 0.6]); break;
+        case 'brood': this.fx.sparks(toV(ev.pos), 18, [1, 0.75, 0.25]); break;
         case 'cloakBroken': {
           const v = this.enemies.get(ev.enemyId);
           if (v) this.fx.sparks(v.view.group.position, 16, [0.3, 0.85, 1]);
@@ -198,10 +204,10 @@ export class Stage {
     for (const b of w.bolts) {
       seen.add(b.id);
       let m = this.boltMeshes.get(b.id);
-      if (!m) { m = new THREE.Mesh(this.boltGeo, this.boltMat); this.root.add(m); this.boltMeshes.set(b.id, m); }
+      if (!m) { m = new THREE.Mesh(this.boltGeo, b.acid ? this.acidMat : this.boltMat); this.root.add(m); this.boltMeshes.set(b.id, m); }
       m.position.set(b.pos.x, b.pos.y, b.pos.z);
-      m.scale.setScalar(1 + Math.sin(this.t * 30) * 0.2);
-      this.fx.sparks(m.position, 1, [1, 0.2, 0.1]);
+      m.scale.setScalar((b.acid ? 1.3 : 1) + Math.sin(this.t * 30) * 0.2);
+      this.fx.sparks(m.position, 1, b.acid ? [0.55, 1, 0.2] : [1, 0.2, 0.1]);
     }
     for (const [id, m] of this.boltMeshes) {
       if (!seen.has(id)) { this.root.remove(m); this.boltMeshes.delete(id); }
@@ -235,7 +241,28 @@ export class Stage {
       if (!rseen.has(id)) { this.root.remove(g); this.rocketMeshes.delete(id); }
     }
 
+    this.syncTethers();
     this.fx.update(dt, w.floorY);
+  }
+
+  /** Тросы гарпунов (стальные) и луч Жнеца (голубой). */
+  private syncTethers(): void {
+    const seen = new Set<number>();
+    for (const th of this.world.tethers) {
+      const ends = this.world.tetherEnds(th);
+      if (!ends) continue;
+      seen.add(th.id);
+      const reaper = this.world.enemies.find((e) => e.id === th.enemyId)?.def.behavior === 'reaper';
+      let m = this.tetherMeshes.get(th.id);
+      if (!m) { m = new THREE.Mesh(BEAM_GEO, reaper ? this.beamMat : this.tetherMat); this.root.add(m); this.tetherMeshes.set(th.id, m); }
+      const a = toV(ends[0]);
+      const b = toV(ends[1]);
+      m.position.copy(a);
+      m.lookAt(b);
+      const thick = reaper ? 6 + Math.sin(this.t * 20) * 1.5 : 1.4;
+      m.scale.set(thick, thick, a.distanceTo(b));
+    }
+    for (const [id, m] of this.tetherMeshes) if (!seen.has(id)) { this.root.remove(m); this.tetherMeshes.delete(id); }
   }
 
   private dropView(id: number): void {
@@ -289,7 +316,9 @@ export class Stage {
       if (!pv) {
         pv = buildPortal(p.kind);
         pv.group.position.copy(toV(p.pos));
-        pv.group.lookAt(c.x, p.pos.y, c.z);
+        // портал в полу лежит горизонтально, остальные смотрят на игрока
+        if (p.floor) pv.group.rotation.x = -Math.PI / 2;
+        else pv.group.lookAt(c.x, p.pos.y, c.z);
         this.root.add(pv.group);
         this.portals.set(p.id, pv);
       }

@@ -3,6 +3,8 @@ import { ENEMIES } from '../data/enemies';
 import { SECTOR1 } from '../data/sector1';
 import { SECTOR2 } from '../data/sector2';
 import { SECTOR3 } from '../data/sector3';
+import { SECTOR4 } from '../data/sector4';
+import { HARPOON, REAPER } from './heavy';
 import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng } from './rng';
 import { BLINK, COLLECTOR, FLAK, JAM, PORTAL, World } from './world';
@@ -512,5 +514,127 @@ describe('сектор 3', () => {
     expect(fired).toBeGreaterThanOrEqual(2);
     expect(visibleAtFire).toBe(true);
     expect(summoned).toBeGreaterThanOrEqual(2);
+  });
+});
+
+/** Бот «как игрок»: мины, тросы, сгустки, затем приоритетные цели. */
+function smartAim(x: World): V3 | null {
+  const m = x.mines[0];
+  if (m) return m.pos;
+  for (const th of x.tethers) {
+    const ends = x.tetherEnds(th);
+    if (ends) return v3((ends[0].x + ends[1].x) / 2, (ends[0].y + ends[1].y) / 2, (ends[0].z + ends[1].z) / 2);
+  }
+  const b = x.bolts[0];
+  if (b) return b.pos;
+  const vis = x.enemies.filter((e) => e.state !== 'emerge' && x.targetable(e));
+  const pri = ['sapper', 'repair', 'jammer', 'leviathan'];
+  const t = vis.find((e) => e.cargoId !== null) ?? vis.find((e) => pri.includes(e.def.id)) ?? vis[0];
+  return t ? clone3(t.pos) : null;
+}
+const clone3 = (p: V3) => v3(p.x, p.y, p.z);
+
+describe('сектор 4', () => {
+  it('шагающий краб вылезает из портала в полу и ходит по полу', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5)] });
+    const c = w.spawn('crab', 0);
+    const portal = w.portals.find((p) => p.id === c.portal)!;
+    expect(portal.floor).toBe(true);
+    expect(portal.pos.y).toBeLessThan(0.1);
+    run(w, 3);
+    expect(c.pos.y).toBeCloseTo(c.def.walk!, 2);
+  });
+
+  it('гарпунщик тянет груз тросом; перебитый трос роняет груз', () => {
+    const w = make({ cargo: [v3(0, 0, 2)] });
+    const h = w.spawn('harpooner', 0);
+    h.state = 'harpoon';
+    h.pos = v3(0, 2.4, 5);
+    h.fireCd = 0.01;
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(w.tethers).toHaveLength(1);
+    expect(h.state).toBe('reel');
+    const c = w.cargo[0];
+    const z0 = c.pos.z;
+    run(w, 1);
+    expect(c.pos.z).toBeGreaterThan(z0);
+    const th = w.tethers[0];
+    th.hp = 1;
+    const [a, b] = w.tetherEnds(th)!;
+    const mid = v3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    w.update(0.01, { firing: true, camPos: CAM, camDir: v3(mid.x - CAM.x, mid.y - CAM.y, mid.z - CAM.z) });
+    expect(w.tethers).toHaveLength(0);
+    expect(c.state).toBe('falling');
+    expect(HARPOON.reel).toBeGreaterThan(0);
+  });
+
+  it('рой-матка выпускает жуков, пока целы мешки', () => {
+    const w = make();
+    const hv = w.spawn('hive', 0);
+    hv.state = 'hive';
+    hv.fireCd = 0.01;
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(w.enemies.filter((e) => e.def.id === 'scout').length).toBe(3);
+    for (const p of hv.parts) if (p.def.kind === 'sensor') p.alive = false;
+    for (const e of w.enemies) if (e.def.id === 'scout') e.dead = true;
+    hv.fireCd = 0.01;
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(w.enemies.filter((e) => e.def.id === 'scout').length).toBe(0);
+  });
+
+  it('сапёр взрывом задевает соседей', () => {
+    const w = make();
+    const sp = w.spawn('sapper', 0);
+    sp.state = 'attack';
+    sp.pos = v3(0, 1.4, 5);
+    const n = w.spawn('scout', 0);
+    n.state = 'seek';
+    n.pos = v3(0.5, 1.4, 5);
+    sp.hp = 1;
+    w.update(0.01, { firing: true, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(sp.dead).toBe(true);
+    expect(n.dead).toBe(true);
+  });
+
+  it('кислотный плевок бьёт по стеклу и оставляет пятно', () => {
+    const w = make();
+    w.bolts.push({ id: 99, pos: v3(0, 1.4, 0.3), vel: v3(0, 0, -1), life: 5, from: v3(0, 1.4, 3), acid: true });
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(w.player.hull).toBe(95);
+    expect(w.drain().some((x) => x.type === 'acidHit')).toBe(true);
+  });
+
+  it('левиафан давит груз и трясёт экран; без ног рушится с наградой', () => {
+    const w = make({ cargo: [v3(0, 0, 3), v3(-2, 0, -2)] });
+    const lv = w.spawn('leviathan', 0);
+    lv.state = 'stomp';
+    lv.pos = v3(0, lv.def.walk!, 4);
+    let shakes = 0;
+    run(w, 8, () => null, () => { shakes += w.drain().filter((x) => x.type === 'shake').length; return w.cargo[0].state === 'lost'; });
+    expect(w.cargo[0].state).toBe('lost');
+    expect(shakes).toBeGreaterThan(0);
+    for (const p of lv.parts) if (p.def.kind === 'engine') p.alive = false;
+    run(w, 3, () => null, () => lv.dead);
+    expect(lv.dead).toBe(true);
+    expect(w.killsBy.leviathan).toBe(1);
+  });
+
+  it('Жнец во 2-й фазе тянет груз лучом в трюм', () => {
+    // волна без врагов в ближайшее время: только Жнец
+    const w = make({ cargo: [v3(0, 0, 2), v3(1, 0, 2)], waves: [{ name: 'тест', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }] });
+    const r = w.spawn('reaper', 0);
+    r.state = 'reaper';
+    r.hp = r.def.hp * 0.5;
+    run(w, REAPER.tractor + 1);
+    expect(w.tethers.some((t) => t.enemyId === r.id)).toBe(true);
+    run(w, 30, () => null, () => w.stats.cargoLost > 0);
+    expect(w.stats.cargoLost).toBeGreaterThan(0);
+  });
+
+  it('сектор 4 с Жнецом проходим при точной стрельбе', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8), v3(1.5, 0, -1), v3(-1.5, 0, -1)], waves: SECTOR4, zone: FAR });
+    run(w, 1800, smartAim, () => w.result !== null);
+    expect(w.result).toBe('win');
+    expect(w.killsBy.reaper).toBe(1);
   });
 });
