@@ -9,7 +9,7 @@ export const SECTOR1: WaveDef[] = [
   },
   {
     name: 'Искры',
-    hint: 'Мара: искры летят прямо в тебя. Сбей — иначе экран треснет.',
+    hint: 'Мара: искры — шустрые воришки. Сбитая искра взрывается и задевает соседей.',
     spawns: [
       { t: 0, enemy: 'scout' }, { t: 1.2, enemy: 'spark' }, { t: 2.4, enemy: 'scout' },
       { t: 3.6, enemy: 'spark' }, { t: 4.8, enemy: 'scout' }, { t: 6, enemy: 'scout' },

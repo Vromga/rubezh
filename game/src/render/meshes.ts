@@ -755,22 +755,78 @@ export function buildRocket(): THREE.Group {
   return g;
 }
 
+/** Груз: колонист в скафандре на платформе или друза энергокристаллов. */
 export function buildCargo(kind: 'colonist' | 'crystal'): THREE.Group {
   const g = new THREE.Group();
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.012, 8, 24), mat(0x44e0ff, 0x22ccff, 1.5, 0));
-  ring.rotation.x = Math.PI / 2; ring.position.y = 0.01;
-  g.add(ring);
+  // платформа-маяк: видно, где груз, даже издалека
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.025, 28), mat(0x2a3440, 0, 0, 0.8, 0.35));
+  pad.position.y = 0.012;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.008, 8, 32).rotateX(Math.PI / 2), mat(0x44e0ff, 0x22ccff, 2, 0));
+  ring.position.y = 0.026;
+  const halo = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.24, 32).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x38e1ff, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.position.y = 0.004;
+  g.add(pad, ring, halo);
   const hold = new THREE.Group();
+  hold.position.y = 0.026;
   if (kind === 'colonist') {
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.08, 4, 10), mat(0x9fe8ff, 0x44ccff, 0.7, 0.1));
-    body.position.y = 0.11;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), mat(0xffe2c8, 0xffcc99, 0.4, 0));
-    head.position.y = 0.22;
-    hold.add(body, head);
+    const suit = mat(0xe8edf2, 0, 0, 0.1, 0.55);
+    const trim = mat(0xff8a2a, 0x331100, 0.2, 0.2, 0.5);
+    const darkM = mat(0x2a3038, 0, 0, 0.4, 0.6);
+    const fig = new THREE.Group();
+    // ноги и ботинки
+    for (const x of [-0.028, 0.028]) {
+      const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.1, 4, 10), suit);
+      leg.position.set(x, 0.085, 0);
+      const boot = box(0.04, 0.03, 0.06, darkM, 0.01); boot.position.set(x, 0.015, 0.008);
+      fig.add(leg, boot);
+    }
+    const torso = box(0.1, 0.12, 0.06, suit, 0.022); torso.position.y = 0.21;
+    const belt = box(0.104, 0.015, 0.064, trim, 0.005); belt.position.y = 0.155;
+    const chest = box(0.04, 0.025, 0.006, mat(0x38e1ff, 0x22ccff, 1.6, 0), 0.004); chest.position.set(0, 0.235, 0.032);
+    const pack = box(0.08, 0.1, 0.04, mat(0xb8c2cc, 0, 0, 0.4, 0.45), 0.012); pack.position.set(0, 0.22, -0.048);
+    const packLight = new THREE.Mesh(new THREE.SphereGeometry(0.006, 6, 4), mat(0x5dffa0, 0x5dffa0, 2.5, 0)); packLight.position.set(0.025, 0.25, -0.07);
+    const arms: THREE.Group[] = [];
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Group();
+      const a = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.09, 4, 8), suit);
+      a.position.y = -0.055;
+      const glove = new THREE.Mesh(new THREE.SphereGeometry(0.019, 8, 6), darkM); glove.position.y = -0.115;
+      arm.add(a, glove);
+      arm.position.set(sx * 0.066, 0.26, 0);
+      arm.rotation.z = sx * 0.12;
+      fig.add(arm); arms.push(arm);
+    }
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.048, 18, 14), suit); helmet.position.y = 0.315;
+    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.042, 16, 10, -1.0, 2.0, 1.0, 1.0), mat(0xffc040, 0x553300, 0.4, 1, 0.08));
+    visor.position.set(0, 0.315, 0.012);
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.05, 4), darkM); ant.position.set(0.03, 0.36, -0.02);
+    fig.add(torso, belt, chest, pack, packLight, helmet, visor, ant);
+    hold.add(fig);
+    // руки: спокойно стоит, а когда несут — машет, зовёт на помощь
+    g.userData.arms = arms;
   } else {
-    const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.075), mat(0x5dffa0, 0x22ff77, 1.2, 0.1));
-    c.scale.y = 1.5; c.position.y = 0.16;
-    hold.add(c);
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.09, 0), mat(0x3a3f46, 0, 0, 0.2, 0.9));
+    rock.scale.set(1.3, 0.45, 1.1); rock.position.y = 0.03;
+    hold.add(rock);
+    const cm = mat(0x5dffa0, 0x22ff77, 1.3, 0.1, 0.12);
+    const shards: [number, number, number, number, number][] = [
+      [0, 0, 0.2, 0, 0], [0.04, 0.02, 0.13, 0.35, 0.2], [-0.045, 0.01, 0.15, -0.4, -0.1], [0.01, -0.045, 0.11, 0.1, -0.45], [-0.02, 0.045, 0.1, -0.2, 0.4],
+    ];
+    for (const [x, z, h, rz, rx] of shards) {
+      const sh = new THREE.Group();
+      const prism = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, h, 6), cm);
+      prism.position.y = h / 2;
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.04, 6), cm);
+      tip.position.y = h + 0.02;
+      sh.add(prism, tip);
+      sh.position.set(x, 0.04, z);
+      sh.rotation.set(rx, 0, rz);
+      hold.add(sh);
+    }
+    const gl = glow(0x5dffa0, 0.45, 0.55); gl.position.y = 0.14;
+    hold.add(gl);
+    g.userData.spin = true;
   }
   g.add(hold);
   g.userData.hold = hold;

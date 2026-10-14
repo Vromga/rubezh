@@ -274,7 +274,7 @@ export class Hud {
     const title = info.win ? 'СЕКТОР ОЧИЩЕН' : info.reason === 'hull' ? 'СВЯЗЬ ПОТЕРЯНА' : 'ГРУЗ УТАЩИЛИ';
     const sub = info.win ? `Сектор ${info.sector} · ${info.sectorName}` : `Сектор ${info.sector} · дошёл до волны ${info.wave}/${info.waves}`;
     const advice = info.win ? '' : info.reason === 'hull'
-      ? 'Мара: сбивай сгустки и искры раньше — и укрепи стекло в Ангаре.'
+      ? 'Мара: сбивай сгустки и тараны раньше — и укрепи стекло в Ангаре.'
       : 'Мара: сначала воры с грузом — их видно по лучу. Хваталке бей по руке.';
     e.innerHTML = `<div class="card endcard"><h2 class="${info.win ? 'win' : 'lose'}">${title}</h2>
       <div class="mute">${sub}</div>

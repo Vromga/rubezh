@@ -195,8 +195,21 @@ export class Stage {
       g.visible = c.state !== 'lost';
       g.position.set(c.pos.x, c.pos.y, c.pos.z);
       const hold = g.userData.hold as THREE.Object3D;
-      hold.position.y = Math.sin(this.t * 2 + c.id) * 0.012;
-      hold.rotation.y = this.t * 0.8 + c.id;
+      if (g.userData.spin) {
+        hold.position.y = 0.026 + Math.sin(this.t * 2 + c.id) * 0.01;
+        hold.rotation.y = this.t * 0.8 + c.id;
+      } else {
+        // колонист смотрит на игрока; когда его несут — машет руками
+        hold.rotation.y = Math.atan2(w.player.pos.x - c.pos.x, w.player.pos.z - c.pos.z);
+        const arms = g.userData.arms as THREE.Object3D[];
+        const panic = c.state === 'carried' || c.state === 'falling';
+        arms.forEach((a, i) => {
+          const sx = i ? 1 : -1;
+          a.rotation.z = panic ? sx * (2.4 + Math.sin(this.t * 14 + i * Math.PI) * 0.5) : sx * (0.12 + Math.sin(this.t * 1.5 + c.id) * 0.04);
+        });
+      }
+      // платформа остаётся на полу, пока груз не унесли
+      for (const ch of g.children) if (ch !== hold) ch.visible = c.state === 'idle';
       g.scale.setScalar(c.state === 'carried' ? 0.9 : 1);
     }
 

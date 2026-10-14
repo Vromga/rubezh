@@ -367,8 +367,8 @@ export class World {
       this.damage(o, this.nearestPart(o, e.pos), b.dmg, e.pos, true);
     }
     if (dist(this.player.pos, e.pos) < b.r) this.hurt(Math.round(b.dmg / 3), e.pos);
-    this.events.push({ type: 'explosion', pos: clone(e.pos), size: 1.8 });
-    this.events.push({ type: 'shake', power: 0.7 });
+    this.events.push({ type: 'explosion', pos: clone(e.pos), size: b.r * 1.1 });
+    if (b.dmg >= 30) this.events.push({ type: 'shake', power: 0.7 });
   }
 
   // ───── волны ─────

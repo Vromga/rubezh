@@ -15,7 +15,8 @@ export const ENEMIES: Record<string, EnemyDef> = {
     ],
   },
   spark: {
-    id: 'spark', name: 'Искра', cls: 'L', hp: 14, speed: 1.1, radius: 0.28, behavior: 'kamikaze', reward: 4, scale: S,
+    id: 'spark', name: 'Искра', cls: 'L', hp: 14, speed: 1.1, radius: 0.28, behavior: 'thief', reward: 4, scale: S,
+    blast: { r: 0.9, dmg: 14 },
     parts: [
       { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.12 },
       { id: 'fin', kind: 'engine', hp: 6, off: v3(0, 0, -0.2), r: 0.1 },

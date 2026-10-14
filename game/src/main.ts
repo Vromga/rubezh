@@ -73,6 +73,17 @@ let spaceDown = false;
 let keyRocket = false, keyEmp = false;
 let frames = 0, lastErr = '', hitCount = 0;
 const DEBUG = new URLSearchParams(location.search).has('debug');
+// Планшеты: двойной тап — зум, щипок — масштаб, долгое нажатие — меню Android. Всё глушим.
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+for (const g of ['gesturestart', 'gesturechange']) document.addEventListener(g, (e) => e.preventDefault(), { passive: false });
+document.addEventListener('touchstart', (e) => { if (e.touches.length > 1 && phase !== 'menu') e.preventDefault(); }, { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = performance.now();
+  if (now - lastTouchEnd < 350 && phase !== 'menu') e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
 addEventListener('error', (e) => { lastErr = String(e.message); });
 addEventListener('unhandledrejection', (e) => { lastErr = String(e.reason); });
 
@@ -83,6 +94,14 @@ const reticle = new THREE.Mesh(
 );
 reticle.matrixAutoUpdate = false;
 reticle.visible = false;
+/** Кружок «на глаз», пока ARCore не нашёл пол: туда встанет груз по касанию. */
+const guessRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.08, 0.11, 32).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0xffb03a, transparent: true, opacity: 0.8 }),
+);
+guessRing.visible = false;
+/** Груз ближе этого к игроку не ставим — воры должны лететь к грузу, а не в лицо. */
+const MIN_CARGO_DIST = 1.0;
 const prepLight = new THREE.HemisphereLight(0xffffff, 0x445066, 2.2);
 /** Веер 60° на полу: сектор, где откроются порталы, — груз ставят перед собой. */
 const FAN_ARC = Math.PI / 3;
@@ -115,8 +134,12 @@ function refreshPrep(): void {
   });
 }
 
-function addPrepCargo(p: V3): void {
+function addPrepCargo(p: V3, check = true): void {
   if (prepCargo.length >= MAX_CARGO) return;
+  if (check && mode === 'ar') {
+    const c = getCam();
+    if (Math.hypot(p.x - c.pos.x, p.z - c.pos.z) < MIN_CARGO_DIST) { hud.say('Слишком близко — поставь груз подальше, в 1–3 м.', 2000); return; }
+  }
   const obj = buildCargo(prepCargo.length % 2 === 0 ? 'colonist' : 'crystal');
   obj.position.set(p.x, p.y, p.z);
   scene.add(obj);
@@ -129,9 +152,11 @@ function guessFloor(c: CamInfo, yawOffset: number): V3 | null {
   const dir = c.dir.clone();
   if (yawOffset !== 0) dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), yawOffset);
   if (dir.y > -0.15) return null;
-  const t = (-EYE_ABOVE_FLOOR) / dir.y;
+  // если пол уже находили — берём его высоту, иначе «на глаз»
+  const below = lastHit ? c.pos.y - lastHit.y : EYE_ABOVE_FLOOR;
+  const t = -below / dir.y;
   if (t < 0.8 || t > 6) return null;
-  return v3(c.pos.x + dir.x * t, c.pos.y - EYE_ABOVE_FLOOR, c.pos.z + dir.z * t);
+  return v3(c.pos.x + dir.x * t, c.pos.y - below, c.pos.z + dir.z * t);
 }
 
 function autoPlace(): void {
@@ -209,7 +234,12 @@ async function startAR(sector: number): Promise<void> {
   ov.classList.add('on');
   await renderer.xr.setSession(session);
   const ref = await session.requestReferenceSpace('viewer');
-  hitSource = (await session.requestHitTestSource!({ space: ref, entityTypes: ['plane', 'point'] })) ?? null;
+  // не все устройства принимают entityTypes — тогда просим без него
+  try {
+    hitSource = (await session.requestHitTestSource!({ space: ref, entityTypes: ['plane', 'point'] })) ?? null;
+  } catch {
+    try { hitSource = (await session.requestHitTestSource!({ space: ref })) ?? null; } catch (e) { lastErr = `hit-test: ${String(e)}`; }
+  }
   session.addEventListener('end', () => onSessionEnd());
   session.addEventListener('select', () => {
     if (phase !== 'prep') return;
@@ -219,9 +249,10 @@ async function startAR(sector: number): Promise<void> {
       const c = getCam();
       const p = guessFloor(c, 0);
       if (p) addPrepCargo(p);
+      else hud.say('Наведи камеру на пол перед собой.', 1800);
     }
   });
-  scene.add(reticle, prepLight, fan);
+  scene.add(reticle, guessRing, prepLight, fan);
   hud.showBattle(false);
   phase = 'prep';
   prepShown = '';
@@ -284,7 +315,7 @@ function startBattle(): void {
   hud.setSlots({ rockets: !!world.rocketState, emp: !!world.empState });
   for (const c of prepCargo) scene.remove(c.obj);
   prepCargo.length = 0;
-  scene.remove(reticle, prepLight, fan);
+  scene.remove(reticle, guessRing, prepLight, fan);
   stage = new Stage(world);
   scene.add(stage.root);
   scene.add(guns.group);
@@ -441,7 +472,7 @@ function exitBattle(c: EndChoice | 'menu'): void {
 
 function cleanupBattle(): void {
   if (stage) scene.remove(stage.root);
-  scene.remove(guns.group, reticle, prepLight, fan);
+  scene.remove(guns.group, reticle, guessRing, prepLight, fan);
   for (const c of prepCargo) scene.remove(c.obj);
   prepCargo.length = 0;
   if (demoGrid) { scene.remove(demoGrid); demoGrid = null; }
@@ -452,6 +483,7 @@ function cleanupBattle(): void {
   transient.length = 0;
   lastHit = null;
   reticle.visible = false;
+  guessRing.visible = false;
   hud.hideEnd();
   hud.hidePrep();
   hud.showBattle(false);
@@ -512,19 +544,27 @@ renderer.setAnimationLoop((t, frame) => {
 
   if (phase === 'prep' && frame && hitSource) {
     const hits = frame.getHitTestResults(hitSource);
-    if (hits.length) {
+    const c = getCam();
+    reticle.visible = false;
+    for (const h of hits) {
+      const pose = h.getPose(renderer.xr.getReferenceSpace()!);
+      if (!pose) continue;
       hitCount++;
-      const pose = hits[0].getPose(renderer.xr.getReferenceSpace()!);
-      // пол: нормаль поверхности (ось Y позы) смотрит вверх; стены игнорируем
-      if (pose && pose.transform.matrix[5] > 0.7) {
-        reticle.visible = true;
-        reticle.matrix.fromArray(pose.transform.matrix);
-        lastHit = v3(...new THREE.Vector3().setFromMatrixPosition(reticle.matrix).toArray() as [number, number, number]);
-      } else reticle.visible = false;
-    } else reticle.visible = false;
+      const m = pose.transform.matrix;
+      const p = v3(m[12], m[13], m[14]);
+      // пол — то, что заметно ниже телефона (стол/стены отсекаются). Ориентацию точки
+      // не проверяем: у «точечных» попаданий она бывает любой, кружок кладём горизонтально.
+      if (c.pos.y - p.y < 0.5) continue;
+      reticle.visible = true;
+      reticle.matrix.makeTranslation(p.x, p.y, p.z);
+      lastHit = p;
+      break;
+    }
+    const guess = reticle.visible ? null : guessFloor(c, 0);
+    guessRing.visible = !!guess;
+    if (guess) guessRing.position.set(guess.x, guess.y, guess.z);
     refreshPrep();
     // веер следует за направлением взгляда, лежит на полу
-    const c = getCam();
     const floorY = lastHit ? lastHit.y : c.pos.y - EYE_ABOVE_FLOOR;
     fan.position.set(c.pos.x, floorY + 0.01, c.pos.z);
     fan.rotation.y = Math.atan2(c.dir.x, c.dir.z);
