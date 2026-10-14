@@ -8,7 +8,15 @@ import { buildCargo, buildEnemy, buildPortal, buildRocket, type EnemyView, type 
 
 const toV = (p: V3) => new THREE.Vector3(p.x, p.y, p.z);
 
-interface EView { view: EnemyView; flash: number; smoke: number; fire: number; charge: number; spawnT: number }
+interface EView {
+  view: EnemyView; flash: number; smoke: number; fire: number; charge: number; spawnT: number;
+  /** все материалы модели с исходной прозрачностью — для невидимости */
+  fade: { m: THREE.Material; opacity: number; transparent: boolean }[];
+  vis: number;
+  beam?: THREE.Mesh;
+}
+
+const BEAM_GEO = new THREE.CylinderGeometry(0.012, 0.012, 1, 6, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2);
 
 /** Связывает логику боя (World) со сценой three.js. */
 export class Stage {
@@ -71,19 +79,27 @@ export class Stage {
             for (const [id, obj] of Object.entries(v.view.parts)) {
               if (obj.visible && id !== 'body') this.fx.detach(obj, obj.position.clone().normalize());
             }
-            this.root.remove(v.view.group);
-            this.enemies.delete(ev.enemyId);
+            this.dropView(ev.enemyId);
           }
           break;
         }
         case 'enemyEscaped': {
-          const v = this.enemies.get(ev.enemyId);
-          if (v) { this.root.remove(v.view.group); this.enemies.delete(ev.enemyId); }
+          this.dropView(ev.enemyId);
           break;
         }
         case 'explosion': this.fx.explosion(toV(ev.pos), ev.size); break;
         case 'boltShot': this.fx.explosion(toV(ev.pos), 0.25); break;
         case 'emp': this.fx.empWave(toV(ev.pos)); break;
+        case 'jam': this.fx.empWave(toV(ev.pos), 0x5dffa0, 6); break;
+        case 'blink':
+          this.fx.sparks(toV(ev.from), 12, [0.75, 0.45, 1]);
+          this.fx.sparks(toV(ev.to), 12, [0.75, 0.45, 1]);
+          break;
+        case 'cloakBroken': {
+          const v = this.enemies.get(ev.enemyId);
+          if (v) this.fx.sparks(v.view.group.position, 16, [0.3, 0.85, 1]);
+          break;
+        }
         case 'telegraph': {
           const v = this.enemies.get(ev.enemyId);
           if (v) v.charge = 0.7;
@@ -114,7 +130,12 @@ export class Stage {
       if (!ev) {
         const view = buildEnemy(e.def);
         this.root.add(view.group);
-        ev = { view, flash: 0, smoke: 0, fire: 0, charge: 0, spawnT: 0 };
+        const fade: EView['fade'] = [];
+        view.group.traverse((o) => {
+          const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+          if (m) fade.push({ m, opacity: m.opacity, transparent: m.transparent });
+        });
+        ev = { view, flash: 0, smoke: 0, fire: 0, charge: 0, spawnT: 0, fade, vis: 1 };
         this.enemies.set(e.id, ev);
         this.fx.sparks(toV(e.pos), 8, [0.8, 0.4, 1]);
       }
@@ -140,6 +161,8 @@ export class Stage {
         else if (e.stun > 0) { m.mat.emissive.setRGB(0.3, 0.8, 1); m.mat.emissiveIntensity = 0.6 + Math.sin(this.t * 25) * 0.4; }
         else if (frac < 0.34) { m.mat.emissive.lerp(new THREE.Color(0xff2200), 0.6); m.mat.emissiveIntensity = Math.max(m.ei, 0.5 + Math.sin(this.t * 12) * 0.3); }
       }
+      this.applyCloak(ev, e.cloak, dt);
+      this.syncBeam(ev, e.beamTo);
       // анимация после сброса материалов: мигалки и пульс ядра не затираются
       if (ev.flash <= 0) ev.view.anim(this.t + e.id);
       if (ev.view.charge) {
@@ -157,8 +180,8 @@ export class Stage {
         if (Math.random() < dt * 4) this.fx.sparks(g.position, 3);
       }
     }
-    for (const [id, ev] of this.enemies) {
-      if (!alive.has(id)) { this.root.remove(ev.view.group); this.enemies.delete(id); }
+    for (const id of [...this.enemies.keys()]) {
+      if (!alive.has(id)) this.dropView(id);
     }
 
     for (const c of w.cargo) {
@@ -213,6 +236,46 @@ export class Stage {
     }
 
     this.fx.update(dt, w.floorY);
+  }
+
+  private dropView(id: number): void {
+    const v = this.enemies.get(id);
+    if (!v) return;
+    this.root.remove(v.view.group);
+    if (v.beam) this.root.remove(v.beam);
+    this.enemies.delete(id);
+  }
+
+  /** Невидимость: модель тает до едва заметного мерцания контура. */
+  private applyCloak(ev: EView, cloak: number, dt: number): void {
+    const vis = 1 - cloak * 0.93;
+    if (Math.abs(vis - ev.vis) < 0.002) return;
+    ev.vis = vis;
+    for (const f of ev.fade) {
+      const t = vis < 0.999 || f.transparent;
+      if (f.m.transparent !== t) { f.m.transparent = t; f.m.needsUpdate = true; }
+      f.m.opacity = f.opacity * vis;
+      f.m.depthWrite = vis > 0.95 && !f.transparent;
+    }
+    // «дрожание воздуха» вокруг невидимки
+    if (cloak > 0.6 && Math.random() < dt * 6) this.fx.sparks(ev.view.group.position, 1, [0.5, 0.8, 1]);
+  }
+
+  /** Луч ремонтника к союзнику. */
+  private syncBeam(ev: EView, to: number | null): void {
+    const target = to === null ? undefined : this.enemies.get(to);
+    if (!target) { if (ev.beam) ev.beam.visible = false; return; }
+    if (!ev.beam) {
+      ev.beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: 0x3dff8a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.root.add(ev.beam);
+    }
+    const a = ev.view.group.position;
+    const b = target.view.group.position;
+    ev.beam.visible = true;
+    ev.beam.position.copy(a);
+    ev.beam.lookAt(b);
+    ev.beam.scale.set(1 + Math.sin(this.t * 30) * 0.4, 1 + Math.sin(this.t * 30) * 0.4, a.distanceTo(b));
+    if (Math.random() < 0.3) this.fx.sparks(b, 1, [0.3, 1, 0.5]);
   }
 
   /** Порталы раскрываются из точки, живут, пока нужны, и схлопываются. */

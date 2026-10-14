@@ -295,6 +295,7 @@ function startBattle(): void {
   ended = false;
   transient.length = 0;
   phase = 'battle';
+  hud.setNight(curSector === 3);
   hud.say('Мара: порталы откроются перед тобой. Стрелки по краям подскажут, откуда угроза.', 6000);
 }
 
@@ -358,6 +359,13 @@ function onEvents(events: GameEvent[], cam: CamInfo): void {
         if (screens.save.settings.vibration) navigator.vibrate?.(80);
         break;
       case 'overheat': sfx.overheat(); hud.say('Перегрев зенитки!', 1800); break;
+      case 'jam':
+        sfx.jam();
+        transient.push({ id: `j${Math.random()}`, pos: ev.pos, ttl: 1.5, danger: true });
+        if (screens.save.settings.vibration) navigator.vibrate?.([30, 30, 30]);
+        break;
+      case 'blink': sfx.blink(); break;
+      case 'cloakBroken': hud.say('Генератор невидимости разбит — больше не скроется!', 2500); break;
       case 'end': finish(ev); break;
       default: break;
     }
@@ -553,6 +561,9 @@ renderer.setAnimationLoop((t, frame) => {
       rs ? { ammo: rs.ammo, lock: rs.locked ? 1 : Math.min(1, rs.lockT / 0.6), locked: rs.locked } : null,
       world.empState ? world.empState.cd / world.empState.cooldown : null,
     );
+    hud.setJam(world.jam > 0 && !!(world.rocketState || world.empState));
+    const boss = world.enemies.find((e) => e.def.cls === 'B');
+    hud.setBoss(boss ? { name: boss.def.name, frac: boss.hp / boss.def.hp, hidden: boss.cloak > 0.6 } : null);
     hud.update({
       wave: world.waveIdx, waves: world.waveCount, left: world.enemies.length,
       hull: world.player.hull, heat: world.weapon.heat, overheated: world.weapon.overheated,
@@ -582,7 +593,7 @@ if (!navigator.xr) {
 // для отладки и автотестов в браузере
 (window as unknown as { __rubezh: unknown }).__rubezh = {
   get world() { return world; },
-  startDemo: () => startDemo(1),
+  startDemo: (n = 1) => startDemo(n),
   screens,
   /** отладка: навести демо-камеру на точку и держать огонь */
   aimAt(p: V3 | null) {

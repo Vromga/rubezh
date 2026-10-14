@@ -59,4 +59,53 @@ export const ENEMIES: Record<string, EnemyDef> = {
       { id: 'rotor', kind: 'engine', hp: 20, off: v3(0, 0.2, 0), r: 0.2 },
     ],
   },
+  jammer: {
+    id: 'jammer', name: 'Глушитель', cls: 'M', hp: 45, speed: 0.7, radius: 0.4, behavior: 'jammer', reward: 14, scale: S,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.18 },
+      { id: 'dish', kind: 'weapon', hp: 18, off: v3(0, 0.2, 0.04), r: 0.15 },
+      { id: 'engL', kind: 'engine', hp: 14, off: v3(-0.24, -0.04, 0), r: 0.1 },
+      { id: 'engR', kind: 'engine', hp: 14, off: v3(0.24, -0.04, 0), r: 0.1 },
+    ],
+  },
+  repair: {
+    id: 'repair', name: 'Ремонтник', cls: 'M', hp: 50, speed: 0.75, radius: 0.38, behavior: 'repair', reward: 16, scale: S,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.17 },
+      { id: 'emitter', kind: 'weapon', hp: 16, off: v3(0, -0.14, 0.16), r: 0.1 },
+      { id: 'rotor', kind: 'engine', hp: 18, off: v3(0, 0.18, 0), r: 0.18 },
+    ],
+  },
+  jumper: {
+    id: 'jumper', name: 'Прыгун', cls: 'M', hp: 35, speed: 0.6, radius: 0.32, behavior: 'thief', reward: 12, scale: S, blink: true,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.14 },
+      { id: 'core', kind: 'sensor', hp: 8, off: v3(0, 0.02, 0.12), r: 0.07 },
+      { id: 'finL', kind: 'engine', hp: 10, off: v3(-0.17, 0, -0.04), r: 0.09 },
+      { id: 'finR', kind: 'engine', hp: 10, off: v3(0.17, 0, -0.04), r: 0.09 },
+    ],
+  },
+  ghost: {
+    id: 'ghost', name: 'Призрак', cls: 'H', hp: 80, speed: 0.55, radius: 0.42, behavior: 'thief', reward: 22, scale: S,
+    cloak: { hidden: 4, shown: 2.2 },
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.22 },
+      { id: 'veil', kind: 'sensor', hp: 18, off: v3(0, 0.18, -0.05), r: 0.1 },
+      { id: 'claw', kind: 'grabber', hp: 24, off: v3(0, -0.24, 0.05), r: 0.12 },
+      { id: 'engL', kind: 'engine', hp: 22, off: v3(-0.26, 0, -0.08), r: 0.1 },
+      { id: 'engR', kind: 'engine', hp: 22, off: v3(0.26, 0, -0.08), r: 0.1 },
+    ],
+  },
+  collector: {
+    id: 'collector', name: 'Сборщик', cls: 'B', hp: 600, speed: 0.5, radius: 0.8, behavior: 'boss', reward: 150, scale: S * 1.4,
+    cloak: { hidden: 5, shown: 3.5 },
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.45 },
+      { id: 'veil', kind: 'sensor', hp: 80, off: v3(0, 0.32, 0), r: 0.16 },
+      { id: 'gunL', kind: 'weapon', hp: 90, off: v3(-0.42, -0.12, 0.28), r: 0.13 },
+      { id: 'gunR', kind: 'weapon', hp: 90, off: v3(0.42, -0.12, 0.28), r: 0.13 },
+      { id: 'engL', kind: 'engine', hp: 140, off: v3(-0.55, 0.05, -0.2), r: 0.16 },
+      { id: 'engR', kind: 'engine', hp: 140, off: v3(0.55, 0.05, -0.2), r: 0.16 },
+    ],
+  },
 };

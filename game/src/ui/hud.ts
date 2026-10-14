@@ -50,7 +50,10 @@ export class Hud {
   constructor(private root: HTMLElement) {
     root.innerHTML = `
       ${COCKPIT}
+      <div class="night"></div>
       <div class="dmg"></div>
+      <div class="bossbar" style="display:none"><b></b><div class="bar"><i></i></div></div>
+      <div class="jammed" style="display:none">ПОМЕХИ · доп. оружие отключено</div>
       <div class="lockbox" data-b><i></i><span></span></div>
       <div class="top" data-b><span class="pill pause tap">‖</span><span class="pill wave"></span><span class="pill enemies"></span>
         <span class="pill cargo"></span><span class="pill gems"></span>
@@ -95,7 +98,12 @@ export class Hud {
     // слоты доп. оружия — только для взятого в бой
     $(this.root, '.rocket').style.display = on && this.slots.rockets ? '' : 'none';
     $(this.root, '.emp').style.display = on && this.slots.emp ? '' : 'none';
-    if (!on) this.firing = false;
+    if (!on) {
+      this.firing = false;
+      this.setBoss(null);
+      this.setNight(false);
+      this.setJam(false);
+    }
   }
 
   // ─ подготовка ─
@@ -213,6 +221,24 @@ export class Hud {
     const p = this.empPressed;
     this.empPressed = false;
     return p;
+  }
+
+  /** Полоса здоровья босса (null — скрыть). */
+  setBoss(b: { name: string; frac: number; hidden: boolean } | null): void {
+    const el = $(this.root, '.bossbar');
+    el.style.display = b ? '' : 'none';
+    if (!b) return;
+    $(el, 'b').textContent = b.hidden ? `${b.name.toUpperCase()} · СКРЫТ` : b.name.toUpperCase();
+    ($(el, 'i')).style.width = `${Math.max(0, b.frac) * 100}%`;
+    el.classList.toggle('hidden', b.hidden);
+  }
+
+  /** Ночной сектор: затемнение краёв. */
+  setNight(on: boolean): void { $(this.root, '.night').classList.toggle('on', on); }
+
+  setJam(on: boolean): void {
+    $(this.root, '.jammed').style.display = on ? '' : 'none';
+    for (const el of this.root.querySelectorAll<HTMLElement>('.slot')) el.classList.toggle('jam', on);
   }
 
   updateSlots(r: { ammo: number; lock: number; locked: boolean } | null, empCd: number | null): void {

@@ -75,6 +75,8 @@ export class Sfx {
     if (kind === 'in') this.tone(90, 260, 0.9, 0.12, 'sine');
     else this.tone(320, 140, 0.7, 0.1, 'sawtooth');
   }
+  jam(): void { this.tone(160, 900, 0.5, 0.08, 'square'); this.noise(0.4, 2500, 1, 0.15, 'bandpass'); }
+  blink(): void { this.tone(1200, 300, 0.15, 0.06, 'sine'); }
   portalClose(): void { this.tone(400, 60, 0.35, 0.08, 'sine'); }
   overheat(): void { this.noise(0.5, 2500, 1, 0.2, 'highpass'); this.tone(300, 120, 0.4, 0.1, 'sawtooth'); }
   lock(): void { this.tone(1200, 1200, 0.08, 0.1, 'square'); setTimeout(() => this.tone(1600, 1600, 0.1, 0.1, 'square'), 90); }

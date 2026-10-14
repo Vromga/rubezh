@@ -340,6 +340,163 @@ export function buildEnemy(def: EnemyDef): EnemyView {
       tipGlow.material.opacity = k * 0.9;
       for (const c of coils) (c.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.4 + k * 2.5;
     };
+  } else if (def.id === 'jammer') {
+    // глушитель: корпус-«таблетка», тарелка-антенна сверху, импульсные кольца
+    const body = new THREE.Group();
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.12, 24), hull());
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.015, 6, 28).rotateX(Math.PI / 2), mat(0x5dffa0, 0x22ff77, 1.4, 0));
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), mat(RED, RED, 2.4, 0, 0.2));
+    eye.position.set(0, 0, 0.18);
+    const eg = glow(RED, 0.18, 0.6); eg.position.set(0, 0, 0.2);
+    body.add(disc, lip, eye, eg);
+    place('body', body);
+    const dish = new THREE.Group();
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.1, 6), dark());
+    mast.position.y = -0.05;
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.13, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2.6), hull(0x9aa5b3));
+    (bowl.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+    bowl.rotation.x = Math.PI;
+    bowl.position.y = 0.06;
+    const feed = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), mat(0x5dffa0, 0x22ff77, 2.4, 0));
+    feed.position.y = 0.03;
+    const fg = glow(0x5dffa0, 0.2, 0.6); fg.position.y = 0.03;
+    dish.add(mast, bowl, feed, fg);
+    place('dish', dish);
+    const flames: THREE.Object3D[] = [];
+    for (const id of ['engL', 'engR']) { const t = thruster(0.055, 0.1); flames.push(t.flame); place(id, t.obj); }
+    view.anim = (t) => { dish.rotation.y = t * 1.5; lip.rotation.z = t; flames.forEach((f, i) => { f.scale.y = 0.85 + Math.sin(t * 33 + i) * 0.2; }); };
+    view.charge = (k) => { (feed.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.4 + k * 5; fg.material.opacity = 0.6 + k * 0.4; fg.scale.setScalar(0.2 + k * 0.5); };
+  } else if (def.id === 'repair') {
+    // ремонтник: белый корпус с крестом, винт сверху, излучатель снизу
+    const body = new THREE.Group();
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 12), hull(0xc9d2dc));
+    shell.scale.set(1, 0.8, 1.1);
+    const crossM = mat(0x3dff8a, 0x22ff77, 1.6, 0, 0.4);
+    const c1 = box(0.1, 0.03, 0.012, crossM, 0.004); c1.position.set(0, 0.02, 0.172);
+    const c2 = box(0.03, 0.1, 0.012, crossM, 0.004); c2.position.set(0, 0.02, 0.172);
+    const b1 = beacon(0x3dff8a, 0.012); b1.obj.position.set(0, 0.13, -0.05);
+    body.add(shell, c1, c2, b1.obj);
+    place('body', body);
+    const em = new THREE.Group();
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.08, 10).rotateX(Math.PI / 2), dark());
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), mat(0x3dff8a, 0x22ff77, 2.5, 0));
+    lens.position.z = 0.045;
+    em.add(barrel, lens);
+    place('emitter', em);
+    const rotor = new THREE.Group();
+    rotor.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 10), dark()));
+    rotor.add(new THREE.Mesh(new THREE.CircleGeometry(0.2, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xaab4c2, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })));
+    for (let i = 0; i < 3; i++) { const bl = box(0.4, 0.008, 0.04, hull(0x8892a0)); bl.rotation.y = (i * Math.PI) / 3; rotor.add(bl); }
+    place('rotor', rotor);
+    view.anim = (t) => { rotor.rotation.y = t * 28; b1.set(Math.sin(t * 3) > 0.5 ? 1 : 0); };
+  } else if (def.id === 'jumper') {
+    // прыгун: гранёный корпус, светящееся ядро-кристалл спереди, плавники
+    const body = new THREE.Group();
+    const shell = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 0), hull(0x7d6aa8));
+    shell.scale.set(1, 0.7, 1.3);
+    const keel = box(0.012, 0.06, 0.24, dark()); keel.position.y = -0.07;
+    body.add(shell, keel);
+    place('body', body);
+    const coreM = mat(0xc890ff, 0xa040ff, 2.4, 0, 0.2);
+    const core = new THREE.Group();
+    core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.045, 0), coreM), glow(0xb36bff, 0.3, 0.7));
+    place('core', core);
+    for (const [id, sx] of [['finL', -1], ['finR', 1]] as const) {
+      const f = new THREE.Group();
+      const blade = box(0.16, 0.012, 0.08, hull(0x5c4f7a), 0.004);
+      blade.rotation.z = sx * 0.3;
+      const tip = beacon(0xb36bff, 0.01); tip.obj.position.x = sx * 0.08;
+      f.add(blade, tip.obj);
+      place(id, f);
+    }
+    view.anim = (t) => { core.rotation.y = t * 4; coreM.emissiveIntensity = 1.8 + Math.sin(t * 9) * 0.8; };
+    view.charge = (k) => { coreM.emissiveIntensity = 2 + k * 6; core.scale.setScalar(1 + k * 0.6); };
+  } else if (def.id === 'ghost') {
+    // призрак: вытянутый «скат» из тёмного стекла, генератор невидимости сверху, клешня
+    const body = new THREE.Group();
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.22, 24, 12), mat(0x2a3446, 0x0a1830, 0.4, 0.9, 0.18));
+    shell.scale.set(1.4, 0.35, 1.1);
+    const spine = box(0.04, 0.05, 0.36, hull(0x4a5568), 0.01); spine.position.y = 0.06;
+    const eyes: THREE.Mesh[] = [];
+    for (const x of [-0.07, 0.07]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), mat(0x7fe3ff, 0x38e1ff, 2.5, 0)); e.position.set(x, 0.02, 0.22); eyes.push(e); }
+    body.add(shell, spine, ...eyes);
+    place('body', body);
+    const veil = new THREE.Group();
+    const veilM = mat(0x113344, 0x38e1ff, 2, 0.2, 0.2);
+    veil.add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.06, 12), veilM), glow(0x38e1ff, 0.3, 0.6));
+    place('veil', veil);
+    const claw = new THREE.Group();
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 6), dark());
+    const k1 = box(0.015, 0.08, 0.04, hull(0xb5bfcc)); k1.position.set(-0.04, -0.12, 0); k1.rotation.z = 0.4;
+    const k2 = box(0.015, 0.08, 0.04, hull(0xb5bfcc)); k2.position.set(0.04, -0.12, 0); k2.rotation.z = -0.4;
+    claw.add(rod, k1, k2);
+    place('claw', claw);
+    const flames: THREE.Object3D[] = [];
+    for (const id of ['engL', 'engR']) { const t = thruster(0.05, 0.1, true); flames.push(t.flame); place(id, t.obj); }
+    view.anim = (t) => { veilM.emissiveIntensity = 1.5 + Math.sin(t * 7) * 0.8; flames.forEach((f, i) => { f.scale.y = 0.8 + Math.sin(t * 30 + i) * 0.2; }); };
+  } else if (def.id === 'collector') {
+    // босс «Сборщик»: широкий диск-матка, генератор сверху, две пушки, два двигателя
+    const body = new THREE.Group();
+    const hullM = hull(0x5a6472);
+    const disc = new THREE.Mesh(new THREE.SphereGeometry(0.5, 36, 16), hullM);
+    disc.scale.set(1, 0.3, 0.85);
+    const belt = new THREE.Mesh(new THREE.TorusGeometry(0.47, 0.025, 8, 48).rotateX(Math.PI / 2), mat(0x221030, 0xb36bff, 1.2, 0.4, 0.3));
+    belt.scale.set(1, 0.85, 1);
+    const belly = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.1, 24), dark());
+    belly.position.y = -0.14;
+    const maw = new THREE.Mesh(new THREE.CircleGeometry(0.16, 24).rotateX(Math.PI / 2), mat(0x1a0830, 0xa040ff, 1.6, 0, 0.3));
+    maw.position.y = -0.195;
+    const mawGlow = glow(0xa040ff, 0.8, 0.5); mawGlow.position.y = -0.22;
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 14, 10), mat(RED, RED, 2.6, 0, 0.2));
+    eye.position.set(0, 0, 0.42);
+    const eg = glow(RED, 0.4, 0.7); eg.position.set(0, 0, 0.46);
+    const lights: { set: (on: number) => void }[] = [];
+    body.add(disc, belt, belly, maw, mawGlow, eye, eg);
+    for (let i = 0; i < 10; i++) {
+      const b = beacon(0xb36bff, 0.016);
+      const a = (i / 10) * Math.PI * 2;
+      b.obj.position.set(Math.sin(a) * 0.48, 0.02, Math.cos(a) * 0.41);
+      body.add(b.obj); lights.push(b);
+    }
+    for (const sx of [-1, 1]) { const fin = box(0.04, 0.12, 0.3, hull(0x4a5562), 0.012); fin.position.set(sx * 0.2, 0.12, -0.2); fin.rotation.z = sx * -0.3; body.add(fin); }
+    place('body', body);
+    const veil = new THREE.Group();
+    const veilM = mat(0x113344, 0x38e1ff, 2.2, 0.2, 0.2);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.15, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x223040, 0x0a2040, 0.5, 0.3, 0.08));
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 8, 24).rotateX(Math.PI / 2), veilM);
+    coil.position.y = 0.05;
+    veil.add(dome, coil, glow(0x38e1ff, 0.5, 0.5));
+    place('veil', veil);
+    const guns: THREE.MeshStandardMaterial[] = [];
+    for (const id of ['gunL', 'gunR']) {
+      const g = new THREE.Group();
+      g.add(box(0.12, 0.1, 0.16, hull(0x4a5562), 0.02));
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.24, 12).rotateX(Math.PI / 2), dark());
+      barrel.position.z = 0.16;
+      const tm = mat(0x330000, RED, 0.3, 0);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), tm);
+      tip.position.z = 0.28;
+      g.add(barrel, tip);
+      guns.push(tm);
+      place(id, g);
+    }
+    const flames: THREE.Object3D[] = [];
+    for (const id of ['engL', 'engR']) {
+      const g = new THREE.Group();
+      const pod = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.22, 6, 14).rotateX(Math.PI / 2), hull(0x6a7482));
+      const t = thruster(0.09, 0.12, true);
+      t.obj.position.z = -0.2;
+      flames.push(t.flame);
+      g.add(pod, t.obj);
+      place(id, g);
+    }
+    view.anim = (t) => {
+      coil.rotation.z = t * 2;
+      veilM.emissiveIntensity = 1.8 + Math.sin(t * 6) * 0.8;
+      lights.forEach((l, i) => l.set(Math.max(0, Math.cos(t * 3 - i * 0.63))));
+      flames.forEach((f, i) => { f.scale.y = 0.85 + Math.sin(t * 28 + i) * 0.2; });
+    };
+    view.charge = (k) => { for (const g of guns) g.emissiveIntensity = 0.3 + k * 4; };
   }
   track(view, view.group);
   return view;

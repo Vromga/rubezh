@@ -122,3 +122,15 @@ html.ar * { backdrop-filter: none !important; }
 body.lefty .slot { right: auto; left: 160px; }
 .lockbox.locking i { border-color: #ffc94a; } .lockbox.locking span { color: #ffd98a; }
 .lockbox.locked i { border-color: #ff2a1a; box-shadow: 0 0 14px #ff2a1a; } .lockbox.locked span { color: #ff6a5a; font-weight: 800; }
+
+/* сектор 3: ночь, помехи, босс */
+.night { inset: 0; pointer-events: none; opacity: 0; transition: opacity 1s; background: radial-gradient(ellipse at center, #02081833 30%, #020818bb 75%, #020818ee 100%); }
+.night.on { opacity: 1; }
+.jammed { left: 50%; top: 22%; transform: translateX(-50%); padding: 6px 14px; border-radius: 10px; background: #0b2a1acc; border: 1px solid #5dffa0; color: #5dffa0; font-weight: 800; letter-spacing: .08em; font-size: 13px; animation: jamblink .4s steps(2) infinite; }
+@keyframes jamblink { 50% { opacity: .45; } }
+.slot.jam { opacity: .35; border-color: #5dffa0; filter: grayscale(1); }
+html.ar .slot.jam { filter: none; }
+.bossbar { left: 50%; top: 118px; transform: translateX(-50%); width: min(420px, 60vw); text-align: center; font-size: 12px; letter-spacing: .14em; color: #e6c8ff; text-shadow: 0 1px 3px #000; }
+.bossbar .bar { height: 8px; margin-top: 3px; border-radius: 4px; background: #1a0d2acc; border: 1px solid #b36bff88; overflow: hidden; }
+.bossbar .bar i { display: block; height: 100%; background: linear-gradient(90deg, #a040ff, #ff4ad0); transition: width .2s; }
+.bossbar.hidden .bar i { opacity: .4; }

@@ -1,7 +1,7 @@
 import type { V3 } from './vec';
 
 export type PartKind = 'core' | 'armor' | 'engine' | 'weapon' | 'grabber' | 'sensor' | 'shield';
-export type Behavior = 'thief' | 'kamikaze' | 'shooter' | 'bomber';
+export type Behavior = 'thief' | 'kamikaze' | 'shooter' | 'bomber' | 'jammer' | 'repair' | 'boss';
 
 export interface PartDef { id: string; kind: PartKind; hp: number; off: V3; r: number }
 
@@ -20,11 +20,15 @@ export interface EnemyDef {
   contactDamage?: number;
   /** Масштаб модели и зон попадания (1 — как в описании частей). */
   scale?: number;
+  /** прыгун: мерцает и телепортируется к цели */
+  blink?: boolean;
+  /** невидимость циклами: сколько секунд скрыт / виден */
+  cloak?: { hidden: number; shown: number };
 }
 
 export interface PartState { def: PartDef; hp: number; alive: boolean }
 
-export type EnemyState = 'emerge' | 'seek' | 'carry' | 'flee' | 'orbit' | 'attack' | 'bomb';
+export type EnemyState = 'emerge' | 'seek' | 'carry' | 'flee' | 'orbit' | 'attack' | 'bomb' | 'jam' | 'repair' | 'boss';
 
 export interface Enemy {
   id: number;
@@ -47,6 +51,20 @@ export interface Enemy {
   dead: boolean;
   /** портал ухода, открытый для этого врага */
   exitId: number | null;
+  /** невидимость 0 (виден) … 1 (невидим); при > 0.6 в него нельзя прицелиться */
+  cloak: number;
+  /** ЭМИ временно снимает невидимость, с */
+  reveal: number;
+  /** генератор невидимости разбит */
+  noCloak: boolean;
+  /** до следующего прыжка (прыгун), с */
+  blinkCd: number;
+  /** кого чинит ремонтник */
+  beamTo: number | null;
+  /** таймер фаз (невидимость, босс) */
+  phaseT: number;
+  /** номер цикла босса */
+  cycle: number;
 }
 
 /** Портал: 'in' — вторжение (открывается заранее), 'out' — уход (открывается перед бегством). */
@@ -96,6 +114,9 @@ export type GameEvent =
   | { type: 'cargoLost'; cargoId: number; pos: V3 }
   | { type: 'portalOpen'; id: number; pos: V3; kind: 'in' | 'out' }
   | { type: 'portalClose'; id: number; kind: 'in' | 'out' }
+  | { type: 'jam'; pos: V3 }
+  | { type: 'blink'; enemyId: number; from: V3; to: V3 }
+  | { type: 'cloakBroken'; enemyId: number }
   | { type: 'waveStart'; index: number; total: number; name: string }
   | { type: 'waveClear'; index: number }
   | { type: 'message'; text: string }

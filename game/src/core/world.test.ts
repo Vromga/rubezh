@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { ENEMIES } from '../data/enemies';
 import { SECTOR1 } from '../data/sector1';
 import { SECTOR2 } from '../data/sector2';
+import { SECTOR3 } from '../data/sector3';
 import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng } from './rng';
-import { FLAK, PORTAL, World } from './world';
+import { BLINK, COLLECTOR, FLAK, JAM, PORTAL, World } from './world';
 import { v3, type V3 } from './vec';
 
 const CAM = v3(0, 1.4, 0);
@@ -12,11 +13,11 @@ const ZONE: PortalZone = { center: CAM, yaw: 0, rMin: 3.5, rMax: 3.5 };
 /** Как в игре: порталы в 7–9 м. */
 const FAR: PortalZone = { center: CAM, yaw: 0, rMin: 7, rMax: 9 };
 
-function make(opts: Partial<{ cargo: V3[]; waves: typeof SECTOR1; zone: PortalZone }> = {}): World {
+function make(opts: Partial<{ cargo: V3[]; waves: typeof SECTOR1; zone: PortalZone; weapons: ConstructorParameters<typeof World>[0]['weapons'] }> = {}): World {
   return new World({
     seed: 7, floorY: 0, player: CAM, zone: opts.zone ?? ZONE,
     cargo: opts.cargo ?? [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8)],
-    waves: opts.waves ?? SECTOR1, enemyDefs: ENEMIES,
+    waves: opts.waves ?? SECTOR1, enemyDefs: ENEMIES, weapons: opts.weapons,
   });
 }
 
@@ -233,6 +234,23 @@ describe('волны', () => {
     expect(w.result).toBe('win');
   });
 
+  it('сектор 3 с боссом проходим при точной стрельбе', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8), v3(1.5, 0, -1), v3(-1.5, 0, -1)], waves: SECTOR3, zone: FAR });
+    run(w, 1500, (x) => {
+      const m = x.mines[0];
+      if (m) return v3(m.pos.x, m.pos.y, m.pos.z);
+      const b = x.bolts[0];
+      if (b) return v3(b.pos.x, b.pos.y, b.pos.z);
+      // как игрок: сначала ремонтник и глушитель, потом воры, остальное
+      const order = ['repair', 'jammer'];
+      const vis = x.enemies.filter((e) => e.state !== 'emerge' && x.targetable(e));
+      const t = vis.find((e) => order.includes(e.def.id)) ?? vis.find((e) => e.cargoId !== null) ?? vis[0];
+      return t ? v3(t.pos.x, t.pos.y, t.pos.z) : null;
+    }, () => w.result !== null);
+    expect(w.result).toBe('win');
+    expect(w.killsBy.collector).toBe(1);
+  });
+
   it('без стрельбы игра проигрывается', () => {
     const w = make();
     run(w, 300, () => null, () => w.result !== null);
@@ -397,5 +415,102 @@ describe('бомбардир', () => {
 describe('баланс зенитки', () => {
   it('скаут умирает не более чем за 4 попадания', () => {
     expect(Math.ceil(ENEMIES.scout.hp / FLAK.damage)).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('сектор 3', () => {
+  it('глушитель отключает ракеты и ЭМИ', () => {
+    const w = make({ weapons: { rockets: { ammo: 4 }, emp: { cooldown: 10 } } });
+    const e = w.spawn('jammer', 0);
+    e.state = 'jam';
+    e.fireCd = 0.01;
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(w.jam).toBeGreaterThan(0);
+    expect(w.drain().some((x) => x.type === 'jam')).toBe(true);
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), emp: true });
+    expect(w.empState!.cd).toBe(0);
+    run(w, JAM.time + 0.2);
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), emp: false });
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), emp: true });
+    expect(w.empState!.cd).toBeGreaterThan(0);
+  });
+
+  it('ремонтник чинит побитого союзника', () => {
+    const w = make();
+    const g = w.spawn('grabber', 0);
+    g.state = 'orbit';
+    g.def = { ...g.def, speed: 0 };
+    g.pos = v3(0, 1.4, 4);
+    g.hp = 20;
+    const r = w.spawn('repair', 0);
+    r.state = 'repair';
+    r.pos = v3(0, 2.2, 4);
+    run(w, 2);
+    expect(g.hp).toBeGreaterThan(30);
+    expect(r.beamTo).toBe(g.id);
+  });
+
+  it('прыгун телепортируется к грузу', () => {
+    const w = make({ cargo: [v3(0, 0, 1)] });
+    const j = w.spawn('jumper', 0);
+    j.state = 'seek';
+    j.pos = v3(0, 1.4, 6);
+    j.blinkCd = 0.01;
+    w.update(0.02, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(w.drain().some((x) => x.type === 'blink')).toBe(true);
+    expect(j.pos.z).toBeLessThan(6 - BLINK.dist + 0.2);
+  });
+
+  it('невидимого призрака нельзя выбрать прицелом, ЭМИ его проявляет', () => {
+    const w = make({ weapons: { emp: { cooldown: 10 } } });
+    const g = w.spawn('ghost', 0);
+    g.state = 'seek';
+    g.def = { ...g.def, speed: 0 };
+    g.pos = v3(0, 1.4, 4);
+    run(w, 1.5);
+    expect(g.cloak).toBeGreaterThan(0.6);
+    expect(w.pick(CAM, v3(0, 0, 1))?.enemy ?? null).toBeNull();
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1), emp: true });
+    run(w, 1);
+    expect(g.cloak).toBeLessThan(0.6);
+    expect(w.pick(CAM, v3(0, 0, 1))?.enemy?.id).toBe(g.id);
+  });
+
+  it('разбитый генератор лишает невидимости навсегда', () => {
+    const w = make();
+    const g = w.spawn('ghost', 0);
+    g.state = 'seek';
+    g.def = { ...g.def, speed: 0 };
+    g.pos = v3(0, 1.4, 4);
+    const veil = g.parts.find((p) => p.def.id === 'veil')!;
+    veil.hp = 1;
+    const at = w.partWorld(g, veil);
+    // генератор сверху: целимся чуть выше него
+    w.update(0.01, { firing: true, camPos: CAM, camDir: v3(at.x, at.y + 0.12 - 1.4, at.z) });
+    expect(g.noCloak).toBe(true);
+    run(w, 8);
+    expect(g.cloak).toBe(0);
+  });
+
+  it('босс скрыт, проявляется для залпа и зовёт подмогу через порталы', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5)] });
+    const b = w.spawn('collector', 0);
+    b.state = 'boss';
+    let fired = 0;
+    let summoned = 0;
+    let maxCloak = 0;
+    let visibleAtFire = true;
+    run(w, (COLLECTOR.hide + COLLECTOR.attack) * 2 + 4, () => null, () => {
+      maxCloak = Math.max(maxCloak, b.cloak);
+      for (const ev of w.drain()) {
+        if (ev.type === 'boltFired') { fired++; if (b.cloak > 0.6) visibleAtFire = false; }
+        if (ev.type === 'portalOpen' && ev.kind === 'in') summoned++;
+      }
+      return false;
+    });
+    expect(maxCloak).toBeGreaterThan(0.9);
+    expect(fired).toBeGreaterThanOrEqual(2);
+    expect(visibleAtFire).toBe(true);
+    expect(summoned).toBeGreaterThanOrEqual(2);
   });
 });

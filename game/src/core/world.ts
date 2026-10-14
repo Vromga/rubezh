@@ -55,7 +55,13 @@ const SPARK_DAMAGE = 12;
 
 export const ROCKET = { lockTime: 0.6, speed0: 3, speed1: 8, turn: 5, damage: 45, splash: 1.3, splashDamage: 22, life: 5 };
 export const BOMB = { height: 1.6, period: 3.5, gravity: 3, blast: 0.6 };
-export const EMP = { stun: 3, cone: 0.75, range: 16 };
+export const EMP = { stun: 3, cone: 0.75, range: 16, reveal: 4 };
+/** Глушитель: импульс отключает ракеты и ЭМИ. */
+export const JAM = { period: 7, time: 3.5 };
+export const REPAIR = { rate: 10, reach: 1.6 };
+export const BLINK = { period: 3.5, dist: 2.2, warn: 0.6 };
+/** Босс «Сборщик»: скрыт → выдаёт себя залпом → призывает подмогу. */
+export const COLLECTOR = { hide: 4.5, attack: 3.5, volleys: [1.0, 2.0] };
 
 /** Тайминги порталов, с. */
 export const PORTAL = { lead: 1.8, open: 0.6, close: 0.5, linger: 1.2, enter: 0.5 };
@@ -76,6 +82,8 @@ export class World {
   /** состояние доп. оружия; null — не взято в бой */
   rocketState: { ammo: number; lockT: number; lockId: number | null; locked: boolean } | null = null;
   empState: { cd: number; cooldown: number } | null = null;
+  /** помехи глушителя: доп. оружие отключено, с */
+  jam = 0;
   private rocketHeld = false;
   private empHeld = false;
   weapon = { heat: 0, overheated: false, cd: 0 };
@@ -130,6 +138,7 @@ export class World {
     dt = Math.min(dt, 0.1);
     this.time += dt;
     this.player.pos = clone(input.camPos);
+    this.jam = Math.max(0, this.jam - dt);
 
     this.updateWeapon(dt, input);
     this.updateRockets(dt, input);
@@ -178,7 +187,7 @@ export class World {
     let bolt: Bolt | null = null;
     let mine: Mine | null = null;
     for (const e of this.enemies) {
-      if (e.dead) continue;
+      if (!this.targetable(e)) continue;
       const t = raySphere(origin, d, e.pos, e.def.radius * (e.def.scale ?? 1) * this.flak.aimAssist);
       if (t !== null && t < bestT) { bestT = t; enemy = e; bolt = null; }
     }
@@ -230,6 +239,11 @@ export class World {
     this.events.push({ type: 'shot', origin: clone(origin), end: add(origin, mul(d, 10)), hit: false });
   }
 
+  /** В невидимого врага нельзя прицелиться (но взрыв ракеты задевает). */
+  targetable(e: Enemy): boolean {
+    return !e.dead && e.cloak < 0.6;
+  }
+
   partWorld(e: Enemy, p: PartState): V3 {
     return add(e.pos, rotY(mul(p.def.off, e.def.scale ?? 1), e.yaw));
   }
@@ -277,7 +291,14 @@ export class World {
       if (e.state === 'seek' || e.state === 'carry') e.state = 'flee';
     }
     if (part.def.kind === 'weapon' && e.def.behavior === 'shooter') e.state = 'attack';
-    if (part.def.kind === 'weapon' && e.def.behavior === 'bomber') e.state = 'flee';
+    if (part.def.kind === 'weapon' && (e.def.behavior === 'bomber' || e.def.behavior === 'jammer' || e.def.behavior === 'repair')) {
+      e.state = 'flee';
+      e.beamTo = null;
+    }
+    if (part.def.id === 'veil') {
+      e.noCloak = true;
+      this.events.push({ type: 'cloakBroken', enemyId: e.id });
+    }
   }
 
   private kill(e: Enemy, byPlayer: boolean): void {
@@ -353,7 +374,8 @@ export class World {
       parts: def.parts.map((p) => ({ def: p, hp: p.hp, alive: true })),
       state: 'emerge', t: 0, portal: portal.id, cargoId: null, targetCargo: null,
       fireCd: 2 + this.rng(), orbitAng: this.rng() * Math.PI * 2, falling: false, dead: false, stun: 0,
-      exitId: null,
+      exitId: null, cloak: 0, reveal: 0, noCloak: false, blinkCd: BLINK.period * (0.6 + 0.4 * this.rng()),
+      beamTo: null, phaseT: 0, cycle: 0,
     };
     e.yaw = Math.atan2(this.player.pos.x - e.pos.x, this.player.pos.z - e.pos.z);
     this.enemies.push(e);
@@ -364,13 +386,15 @@ export class World {
 
   private stepEnemy(e: Enemy, dt: number): void {
     e.t += dt;
+    this.updateCloak(e, dt);
     if (e.stun > 0 && !e.falling) { e.stun -= dt; return; }
     if (e.state === 'emerge') {
       // вылезает из портала в сторону игрока
       const out = norm(sub(this.player.pos, e.pos));
       e.pos = add(e.pos, mul(v3(out.x, 0, out.z), 0.9 * dt));
       if (e.t >= 0.7) {
-        e.state = e.def.behavior === 'shooter' ? 'orbit' : e.def.behavior === 'kamikaze' ? 'attack' : e.def.behavior === 'bomber' ? 'bomb' : 'seek';
+        const first: Record<string, Enemy['state']> = { shooter: 'orbit', kamikaze: 'attack', bomber: 'bomb', jammer: 'jam', repair: 'repair', boss: 'boss' };
+        e.state = first[e.def.behavior] ?? 'seek';
       }
       return;
     }
@@ -382,7 +406,8 @@ export class World {
       e.pos.x += e.vel.x * 0.4 * dt;
       e.pos.z += e.vel.z * 0.4 * dt;
       e.pos.y += e.vel.y * dt;
-      if (e.pos.y <= this.floorY + 0.08) this.kill(e, false); // разбился: награды нет
+      // разбился: награды нет (кроме босса)
+      if (e.pos.y <= this.floorY + 0.08) this.kill(e, e.def.cls === 'B');
       return;
     }
     const speed = e.def.speed * (1 - (engines.length ? 0.45 * (lost / engines.length) : 0));
@@ -393,6 +418,9 @@ export class World {
       case 'attack': this.stepAttack(e, speed, dt); break;
       case 'orbit': this.stepOrbit(e, speed, dt); break;
       case 'bomb': this.stepBomb(e, speed, dt); break;
+      case 'jam': this.stepJam(e, speed, dt); break;
+      case 'repair': this.stepRepair(e, speed, dt); break;
+      case 'boss': this.stepBoss(e, speed, dt); break;
       default: break;
     }
   }
@@ -423,6 +451,7 @@ export class World {
     }
     if (!c) { e.state = 'flee'; return; }
     const target = v3(c.pos.x, c.pos.y + 0.4, c.pos.z);
+    this.tryBlink(e, target, dt);
     this.flyTo(e, target, speed, dt);
     if (distXZ(e.pos, target) < 0.22 && Math.abs(e.pos.y - target.y) < 0.25) {
       c.state = 'carried';
@@ -435,6 +464,7 @@ export class World {
   private stepCarry(e: Enemy, speed: number, dt: number): void {
     const exit = this.exitFor(e);
     const p = exit.pos;
+    this.tryBlink(e, p, dt);
     this.flyTo(e, p, speed, dt, 0.15);
     if (dist(e.pos, p) < PORTAL.enter && exit.state !== 'opening') {
       this.closePortal(exit);
@@ -513,6 +543,127 @@ export class World {
     }
   }
 
+  // ───── сектор 3: невидимость, прыжки, помехи, ремонт, босс ─────
+
+  private updateCloak(e: Enemy, dt: number): void {
+    e.reveal = Math.max(0, e.reveal - dt);
+    let want = 0;
+    if (e.def.cloak && !e.noCloak && e.state !== 'emerge' && !e.falling && e.reveal <= 0 && e.cargoId === null) {
+      if (e.def.behavior === 'boss') want = e.state === 'boss' && e.phaseT < COLLECTOR.hide ? 1 : 0;
+      else {
+        e.phaseT += dt;
+        const len = e.def.cloak.hidden + e.def.cloak.shown;
+        want = e.phaseT % len < e.def.cloak.hidden ? 1 : 0;
+      }
+    }
+    const k = Math.min(1, dt * 2.5);
+    e.cloak += (want - e.cloak) * k;
+    if (Math.abs(want - e.cloak) < 0.01) e.cloak = want;
+  }
+
+  /** Прыгун мерцает и перескакивает ближе к цели. */
+  private tryBlink(e: Enemy, target: V3, dt: number): void {
+    if (!e.def.blink) return;
+    e.blinkCd -= dt;
+    if (e.blinkCd <= BLINK.warn && e.blinkCd + dt > BLINK.warn) this.events.push({ type: 'telegraph', enemyId: e.id, pos: clone(e.pos) });
+    if (e.blinkCd > 0) return;
+    e.blinkCd = BLINK.period;
+    const to = sub(target, e.pos);
+    const d = Math.hypot(to.x, to.y, to.z);
+    if (d < 0.6) return;
+    const from = clone(e.pos);
+    e.pos = add(e.pos, mul(norm(to), Math.min(BLINK.dist, d - 0.4)));
+    this.events.push({ type: 'blink', enemyId: e.id, from, to: clone(e.pos) });
+  }
+
+  /** Точка «висения» перед игроком: дуга ±30°, расстояние r. */
+  private hoverPoint(e: Enemy, r: number, dy: number): V3 {
+    const p = this.player.pos;
+    const a = this.front + Math.sin(e.orbitAng) * 0.5;
+    return v3(p.x + Math.sin(a) * r, p.y + dy + Math.sin(e.t * 0.9) * 0.2, p.z + Math.cos(a) * r);
+  }
+
+  private faceTo(e: Enemy, at: V3, dt: number): void {
+    e.yaw += wrapAngle(Math.atan2(at.x - e.pos.x, at.z - e.pos.z) - e.yaw) * Math.min(1, dt * 4);
+  }
+
+  /** Глушитель висит впереди и раз в JAM.period отключает доп. оружие. */
+  private stepJam(e: Enemy, speed: number, dt: number): void {
+    e.orbitAng += 0.2 * dt;
+    const want = this.hoverPoint(e, 5, 0.7);
+    this.flyTo(e, want, Math.min(speed, dist(e.pos, want) * 2 + 0.05), dt, 0);
+    this.faceTo(e, this.player.pos, dt);
+    e.fireCd -= dt;
+    if (e.fireCd <= 1 && e.fireCd + dt > 1) this.events.push({ type: 'telegraph', enemyId: e.id, pos: clone(e.pos) });
+    if (e.fireCd <= 0) {
+      e.fireCd = JAM.period;
+      this.jam = JAM.time;
+      this.events.push({ type: 'jam', pos: clone(e.pos) });
+    }
+  }
+
+  /** Ремонтник летит к самому побитому союзнику и чинит его лучом. */
+  private stepRepair(e: Enemy, speed: number, dt: number): void {
+    let target: Enemy | undefined;
+    let worst = 1;
+    for (const o of this.enemies) {
+      if (o === e || o.dead || o.def.behavior === 'repair') continue;
+      const f = o.hp / o.def.hp;
+      if (f < worst - 0.001) { worst = f; target = o; }
+    }
+    if (!target) {
+      e.beamTo = null;
+      e.orbitAng += 0.15 * dt;
+      const want = this.hoverPoint(e, 6, 1);
+      this.flyTo(e, want, Math.min(speed, dist(e.pos, want) * 2 + 0.05), dt, 0);
+      this.faceTo(e, this.player.pos, dt);
+      return;
+    }
+    const want = add(target.pos, v3(0, 0.8, 0));
+    this.flyTo(e, want, Math.min(speed * 1.2, dist(e.pos, want) * 2 + 0.05), dt, 0.1);
+    this.faceTo(e, target.pos, dt);
+    if (dist(e.pos, target.pos) < REPAIR.reach) {
+      e.beamTo = target.id;
+      target.hp = Math.min(target.def.hp, target.hp + REPAIR.rate * dt);
+    } else e.beamTo = null;
+  }
+
+  /** Босс «Сборщик»: скрыт и перемещается → проявляется и даёт залп → через цикл зовёт подмогу. */
+  private stepBoss(e: Enemy, speed: number, dt: number): void {
+    const hideT = e.noCloak ? 2 : COLLECTOR.hide;
+    // начало цикла: новая точка и, через раз, подкрепление
+    if (e.phaseT === 0) {
+      e.orbitAng = (this.rng() - 0.5) * 2;
+      if (e.cycle % 2 === 1) {
+        const crew = e.hp < e.def.hp / 2 ? ['jammer', 'grabber', 'scout'] : e.cycle % 4 === 1 ? ['jammer', 'scout'] : ['ghost', 'scout'];
+        crew.forEach((id, i) => this.pending.push({ at: this.time + PORTAL.lead + i * 0.6, enemy: id, portalId: null }));
+        this.events.push({ type: 'message', text: 'Мара: Сборщик зовёт подмогу!' });
+      }
+    }
+    e.phaseT += dt;
+    const want = this.hoverPoint(e, 5.5, 0.8);
+    this.flyTo(e, want, Math.min(speed, dist(e.pos, want) * 1.5 + 0.05), dt, 0);
+    this.faceTo(e, this.player.pos, dt);
+    const at = e.phaseT - hideT;
+    if (at >= 0) {
+      if (at - dt < 0) this.events.push({ type: 'telegraph', enemyId: e.id, pos: clone(e.pos) });
+      const guns = e.parts.filter((p) => p.def.kind === 'weapon' && p.alive);
+      for (const v of COLLECTOR.volleys) {
+        if (at >= v && at - dt < v) {
+          // по сгустку из каждой живой пушки (без пушек — один из корпуса)
+          const n = Math.max(1, guns.length);
+          for (let i = 0; i < n; i++) {
+            const from = guns[i] ? this.partWorld(e, guns[i]) : clone(e.pos);
+            const aim = add(this.player.pos, v3((i - (n - 1) / 2) * 0.25, 0, 0));
+            this.bolts.push({ id: this.nextId++, pos: from, vel: mul(norm(sub(aim, from)), BOLT_SPEED * 1.2), life: 6, from: clone(from) });
+          }
+          this.events.push({ type: 'boltFired', from: clone(e.pos) });
+        }
+      }
+      if (at >= COLLECTOR.attack) { e.phaseT = 0; e.cycle++; }
+    }
+  }
+
   private updateMines(dt: number): void {
     for (const m of this.mines) {
       m.vy -= BOMB.gravity * dt;
@@ -552,7 +703,9 @@ export class World {
   private openPortal(kind: 'in' | 'out', owner: number | null, lane?: number): Portal {
     const avoid = this.portals.map((q) => q.pos);
     const pos = pickPortalPos(this.zone, this.floorY, this.rng, avoid, lane);
-    const p: Portal = { id: this.nextId++, pos, kind, state: 'opening', t: 0, owner, closeAt: Infinity };
+    // страховка: портал вторжения не висит дольше, чем нужно врагу, чтобы вылезти
+    const closeAt = kind === 'in' ? this.time + PORTAL.lead + PORTAL.linger + 1 : Infinity;
+    const p: Portal = { id: this.nextId++, pos, kind, state: 'opening', t: 0, owner, closeAt };
     this.portals.push(p);
     this.events.push({ type: 'portalOpen', id: p.id, pos: clone(pos), kind });
     return p;
@@ -607,7 +760,9 @@ export class World {
   private updateRockets(dt: number, input: Input): void {
     const rs = this.rocketState;
     if (rs) {
-      const held = !!input.rocket;
+      // помехи: захват сбрасывается, пуск невозможен
+      const held = !!input.rocket && this.jam <= 0;
+      if (this.jam > 0) { rs.locked = false; rs.lockId = null; rs.lockT = 0; }
       if (held && rs.ammo > 0) {
         const hit = this.pick(input.camPos, norm(input.camDir));
         const id = hit?.enemy?.id ?? null;
@@ -673,7 +828,7 @@ export class World {
     es.cd = Math.max(0, es.cd - dt);
     const pressed = !!input.emp && !this.empHeld;
     this.empHeld = !!input.emp;
-    if (!pressed || es.cd > 0) return;
+    if (!pressed || es.cd > 0 || this.jam > 0) return;
     es.cd = es.cooldown;
     const dir = norm(input.camDir);
     let n = 0;
@@ -681,7 +836,7 @@ export class World {
       if (e.dead) continue;
       const to = sub(e.pos, input.camPos);
       const d = Math.hypot(to.x, to.y, to.z);
-      if (d < EMP.range && dot(norm(to), dir) > Math.cos(EMP.cone)) { e.stun = EMP.stun; n++; }
+      if (d < EMP.range && dot(norm(to), dir) > Math.cos(EMP.cone)) { e.stun = EMP.stun; e.reveal = EMP.reveal; n++; }
     }
     for (const b of [...this.bolts, ...this.mines]) this.events.push({ type: 'boltShot', pos: clone(b.pos) });
     this.bolts = [];

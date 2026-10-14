@@ -142,13 +142,13 @@ export class Fx {
   }
 
   /** Волна ЭМИ: расширяющаяся голубая сфера вокруг игрока. */
-  empWave(p: THREE.Vector3): void {
+  empWave(p: THREE.Vector3, color = 0x66ddff, size = 9): void {
     const mesh = new THREE.Mesh(this.flashGeo, new THREE.MeshBasicMaterial({
-      color: 0x66ddff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, wireframe: true,
+      color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, wireframe: true,
     }));
     mesh.position.copy(p);
     this.root.add(mesh);
-    this.flashes.push({ mesh, life: 0.7, max: 0.7, size: 9 });
+    this.flashes.push({ mesh, life: 0.7, max: 0.7, size });
   }
 
   /** Превратить объект сцены (часть врага) в летящий обломок. */
