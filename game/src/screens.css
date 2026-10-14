@@ -86,10 +86,37 @@ svg.wicon { width: 1.8em; height: 1.8em; }
 #screens input[type=range] { width: 100%; accent-color: #38e1ff; }
 #screens input[type=checkbox] { width: 1.4em; height: 1.4em; accent-color: #38e1ff; }
 
+/* книжная ориентация: всё в одну колонку, верхняя панель переносится */
 @media (max-aspect-ratio: 1/1) {
   .brief, .split, .split.wide, .cols3 { grid-template-columns: 1fr; }
-  .mara-line { position: static; margin-top: 1em; }
+  .mara-line { position: static; margin-top: 1em; max-width: none; }
   #screens { font-size: 15px; }
+  .s-top { flex-wrap: wrap; row-gap: .5em; gap: .5em; }
+  .s-top .pill { padding: .3em .65em; }
+  .s-title { font-size: 1.1em; letter-spacing: .06em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 0; }
+  .s-top .grow { display: none; }
+  .s-top > .mute { order: 11; flex: 1 0 100%; font-size: .85em; }
+  .s-top .tabs { order: 10; flex: 1 0 100%; margin-left: 0; }
+  .s-top .tabs span { flex: 1; text-align: center; }
+  .logo { font-size: 2.6em; }
+  .menu-main { margin-top: 4vh; max-width: none; }
+  .menu-main .row { flex-wrap: wrap; }
+  .menu-main .row > .btn { flex: 1 1 40%; }
+  .portal-deco { right: 6%; top: auto; bottom: 30%; width: 22vh; height: 22vh; opacity: .35; }
+  /* кампания: список сверху вниз, картинка справа */
+  .sectors { grid-template-columns: 1fr; overflow: visible; }
+  .sector { min-height: 0; display: grid; grid-template-columns: 1fr 6em; column-gap: .9em; row-gap: .2em; align-content: start; }
+  .sector > * { grid-column: 1; }
+  .sector > .sector-pic { grid-column: 2; grid-row: 1 / span 5; min-height: 6em; }
+  .portal-mini { width: 4em; height: 4em; margin: -2em 0 0 -2em; }
+  .threat { width: 6.2em; }
+  .grid24 { grid-template-columns: repeat(4, 1fr); }
+  .pic { min-height: 22vh; }
+  .hpic { max-height: 22vh; }
+  .eicon.big { max-height: 20vh; }
+  .urow { gap: .6em; padding: .6em .8em; }
+  .urow .pips { font-size: .75em; }
+  .urow > div:first-child { min-width: 0; }
 }
 #screens button.pill { background: #000a; color: #eaf6ff; padding: .35em .85em; border-radius: .8em; font-weight: 600; border: 1px solid #ffffff22; }
 

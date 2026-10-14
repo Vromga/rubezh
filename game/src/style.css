@@ -134,3 +134,31 @@ html.ar .slot.jam { filter: none; }
 .bossbar .bar { height: 8px; margin-top: 3px; border-radius: 4px; background: #1a0d2acc; border: 1px solid #b36bff88; overflow: hidden; }
 .bossbar .bar i { display: block; height: 100%; background: linear-gradient(90deg, #a040ff, #ff4ad0); transition: width .2s; }
 .bossbar.hidden .bar i { opacity: .4; }
+
+/* книжная ориентация в бою: верх в две строки, слоты слева снизу под левый большой палец */
+@media (max-aspect-ratio: 1/1) {
+  .top { left: 12px; right: 12px; flex-wrap: wrap; gap: 6px 8px; font-size: 13px; }
+  .top .pill { padding: 4px 8px; }
+  .top .pause { order: 1; } .top .wave { order: 2; } .top .enemies { order: 3; } .top .gems { order: 4; }
+  .top .cargo { order: 5; } .top .bar.hull { order: 6; flex: 1 1 100px; max-width: none; height: 10px; }
+  .bossbar { top: 82px; }
+  .msg { top: 118px; max-width: calc(100vw - 32px); font-size: 14px; }
+  .bossbar { width: calc(100vw - 32px); }
+  .jammed { top: auto; bottom: 236px; }
+  .fire { right: 16px; bottom: 18px; width: 112px; height: 112px; }
+  .heat { left: 16px; bottom: 112px; width: calc(100vw - 168px); max-width: 220px; }
+  .slot { right: auto; width: 64px; height: 64px; bottom: 22px; }
+  .slot.rocket { left: 16px; bottom: 22px; }
+  .slot.emp { left: 92px; bottom: 22px; }
+  body.lefty .fire { left: 16px; right: auto; }
+  body.lefty .heat { left: auto; right: 16px; }
+  body.lefty .slot { left: auto; }
+  body.lefty .slot.rocket { right: 16px; }
+  body.lefty .slot.emp { right: 92px; }
+  .banner { top: 24%; font-size: 26px; }
+  .end .card { max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow: auto; padding: 18px 16px; min-width: 0; }
+  .endgrid { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .end .row { flex-wrap: wrap; justify-content: center; }
+  .end .row .grow { display: none; }
+  .end .row button { flex: 1 1 40%; padding: 12px 10px; }
+}
