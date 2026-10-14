@@ -517,8 +517,8 @@ export class World {
       e.pos.x += e.vel.x * 0.4 * dt;
       e.pos.z += e.vel.z * 0.4 * dt;
       e.pos.y += e.vel.y * dt;
-      // разбился: награды нет (кроме босса)
-      if (e.pos.y <= this.floorY + 0.08) this.kill(e, e.def.cls === 'B' || !!e.def.walk);
+      // разбился (о пол или после ~1,2 с падения — пол в AR неточен): награды нет, кроме босса
+      if (e.pos.y <= this.floorY + 0.08 || e.vel.y < -6) this.kill(e, e.def.cls === 'B' || !!e.def.walk);
       return;
     }
     let speed = e.def.speed * (1 - (engines.length ? 0.45 * (lost / engines.length) : 0));

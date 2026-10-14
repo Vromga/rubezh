@@ -278,7 +278,7 @@ export class Stage {
 
     this.syncTethers();
     this.syncArms(dt);
-    this.fx.update(dt, w.floorY);
+    this.fx.update(dt);
   }
 
   /** Луч лазера и дрон «Оса». */

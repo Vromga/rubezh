@@ -67,9 +67,12 @@ class PointPool {
   }
 }
 
-/** Обломок: падает до пола, отскакивает, лежит REST секунд и уходит в пол. */
-interface Debris { obj: THREE.Object3D; vel: THREE.Vector3; spin: THREE.Vector3; life: number; landed: boolean; bounces: number; rest: number; half: number }
-const DEBRIS = { gravity: 9.8, rest: 4, sink: 1, maxFall: 8, max: 70 };
+/**
+ * Обломок: падает, горит и плавно тает за 1–2 с. Пол не нужен —
+ * в AR его высота известна неточно, и обломки «висели» бы в воздухе.
+ */
+interface Debris { obj: THREE.Object3D; vel: THREE.Vector3; spin: THREE.Vector3; life: number; max: number; mats: THREE.Material[]; burn: number }
+const DEBRIS = { gravity: 7, minLife: 1.1, maxLife: 1.9, max: 70 };
 interface Flash { mesh: THREE.Mesh; life: number; max: number; size: number }
 interface Tracer { mesh: THREE.Mesh; life: number }
 
@@ -188,74 +191,63 @@ export class Fx {
     obj.getWorldPosition(piece.position);
     obj.getWorldQuaternion(piece.quaternion);
     obj.getWorldScale(piece.scale);
-    // обгоревший металл: темнее, без свечения; огни, ореолы и пламя сопел гаснут
+    // обгоревший металл: темнее, светится углями; огни, ореолы и пламя сопел гаснут
+    const mats: THREE.Material[] = [];
     piece.traverse((o) => {
       if ((o as THREE.Sprite).isSprite || o.userData.fx) { o.visible = false; return; }
       const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-      if (!m || !m.isMeshStandardMaterial) return;
+      if (!m || !(o as THREE.Mesh).isMesh) return;
       const burnt = m.clone();
-      burnt.color.multiplyScalar(0.45);
-      burnt.emissive.setRGB(0.25, 0.08, 0);
-      burnt.emissiveIntensity = 0.35;
-      burnt.transparent = false;
-      burnt.opacity = 1;
+      if (burnt.isMeshStandardMaterial) {
+        burnt.color.multiplyScalar(0.45);
+        burnt.emissive.setRGB(0.6, 0.18, 0.02);
+        burnt.emissiveIntensity = 0.6;
+      }
+      burnt.transparent = true;
+      burnt.depthWrite = false;
       (o as THREE.Mesh).material = burnt;
+      mats.push(burnt);
     });
     this.root.add(piece);
-    // ложится на самую тонкую сторону — столько и держим над полом
-    const size = new THREE.Box3().setFromObject(piece).getSize(new THREE.Vector3());
-    const half = Math.max(0.01, Math.min(size.x, size.y, size.z) / 2);
     if (this.debris.length >= DEBRIS.max) this.removeDebris(this.debris.shift()!);
+    const life = DEBRIS.minLife + Math.random() * (DEBRIS.maxLife - DEBRIS.minLife);
     this.debris.push({
       obj: piece,
-      vel: outward.clone().multiplyScalar(1.1 * power).add(new THREE.Vector3(rnd(0.6), 0.4 + Math.random() * 0.8, rnd(0.6))),
-      spin: new THREE.Vector3(rnd(7), rnd(7), rnd(7)),
-      life: DEBRIS.maxFall, landed: false, bounces: 0, rest: DEBRIS.rest + Math.random() * 2, half,
+      vel: outward.clone().multiplyScalar(1.1 * power).add(new THREE.Vector3(rnd(0.6), 0.3 + Math.random() * 0.6, rnd(0.6))),
+      spin: new THREE.Vector3(rnd(6), rnd(6), rnd(6)),
+      life, max: life, mats, burn: 0,
     });
     obj.visible = false;
   }
 
   private removeDebris(d: Debris): void {
     this.root.remove(d.obj);
-    d.obj.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-      if (m && (o as THREE.Mesh).isMesh) m.dispose();
-    });
+    for (const m of d.mats) m.dispose();
   }
 
-  update(dt: number, floorY: number): void {
+  update(dt: number): void {
     this.glow.update(dt);
     this.smoke.update(dt);
     for (const d of this.debris) {
-      if (d.landed) {
-        // лежит на полу, потом медленно «тонет» в нём
-        d.rest -= dt;
-        if (d.rest < 0) d.obj.position.y -= dt * (d.half * 2 + 0.02) / DEBRIS.sink;
-        if (d.rest > 0 && Math.random() < dt * 1.5) this.smokePuff(d.obj.position, 0.05);
-        continue;
-      }
       d.life -= dt;
       d.vel.y -= DEBRIS.gravity * dt;
       d.obj.position.addScaledVector(d.vel, dt);
       d.obj.rotation.x += d.spin.x * dt; d.obj.rotation.y += d.spin.y * dt; d.obj.rotation.z += d.spin.z * dt;
-      if (Math.random() < dt * 14) this.smokePuff(d.obj.position, 0.07);
-      if (d.obj.position.y <= floorY + d.half) {
-        d.obj.position.y = floorY + d.half;
-        if (d.bounces === 0) this.sparks(d.obj.position, 4, [1, 0.7, 0.3]);
-        d.bounces++;
-        if (d.bounces >= 3 || Math.abs(d.vel.y) < 0.6) {
-          d.landed = true;
-          d.spin.set(0, 0, 0);
-        } else {
-          d.vel.set(d.vel.x * 0.4, Math.abs(d.vel.y) * 0.3, d.vel.z * 0.4);
-          d.spin.multiplyScalar(0.4);
-        }
+      const k = Math.max(0, d.life / d.max); // 1 → 0
+      for (const m of d.mats) m.opacity = Math.min(1, k * 1.6);
+      if (k < 0.4) d.obj.scale.multiplyScalar(Math.max(0.01, 1 - dt * 1.5));
+      // горит: огонь гуще в начале, потом дым
+      d.burn += dt * (6 + 14 * k);
+      while (d.burn > 1) {
+        d.burn -= 1;
+        if (Math.random() < k) this.fire(d.obj.position);
+        else this.smokePuff(d.obj.position, 0.07);
       }
     }
     this.debris = this.debris.filter((d) => {
-      const gone = d.life <= 0 || (d.landed && d.rest < -DEBRIS.sink);
-      if (gone) this.removeDebris(d);
-      return !gone;
+      if (d.life > 0) return true;
+      this.removeDebris(d);
+      return false;
     });
     for (const f of this.flashes) {
       f.life -= dt;
