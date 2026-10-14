@@ -94,8 +94,11 @@ export class Stage {
         case 'enemyKilled': {
           const v = this.enemies.get(ev.enemyId);
           if (v) {
+            // разваливается целиком: корпус тоже падает на пол
             for (const [id, obj] of Object.entries(v.view.parts)) {
-              if (obj.visible && id !== 'body') this.fx.detach(obj, obj.position.clone().normalize());
+              if (!obj.visible) continue;
+              const out = id === 'body' ? new THREE.Vector3() : obj.position.clone().normalize();
+              this.fx.detach(obj, out, id === 'body' ? 0.3 : 1);
             }
             this.dropView(ev.enemyId);
           }

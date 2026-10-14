@@ -98,6 +98,7 @@ function thruster(r: number, len: number, back = false): { obj: THREE.Group; fla
   const g = glow(0x55bbff, r * 6, 0.9);
   g.position.y = -len * 0.7;
   flame.add(cone, g);
+  flame.userData.fx = true; // в обломках пламя гаснет
   obj.add(nozzle, collar, flame);
   if (back) obj.rotation.x = Math.PI / 2;
   return { obj, flame };
