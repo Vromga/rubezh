@@ -151,6 +151,8 @@ export class Stage {
       let ev = this.enemies.get(e.id);
       if (!ev) {
         const view = buildEnemy(e.def);
+        // элита — золотое свечение корпуса
+        if (e.elite) for (const m of view.mats) { m.emissive.setHex(0xffc94a); m.ei = Math.max(m.ei, 0.45); }
         this.root.add(view.group);
         const fade: EView['fade'] = [];
         view.group.traverse((o) => {

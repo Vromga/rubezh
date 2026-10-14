@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBattle, buyUpgrade, buyWeapon, computeStars, defaultSave, flakStats, loadSave, maxHull, nextCost, storeSave, weaponOpts } from './save';
+import { applyBattle, buyUpgrade, canAfford, buyWeapon, computeStars, defaultSave, flakStats, loadSave, maxHull, nextCost, storeSave, weaponOpts } from './save';
 
 const mem = () => {
   const m = new Map<string, string>();
@@ -106,5 +106,20 @@ describe('итоги боя', () => {
     applyBattle(s, { sector: 1, win: false, crystals: 12, wavesDone: 2, stars: 0, kills: {}, seen: [] });
     expect(s.crystals).toBe(12);
     expect(s.unlocked).toBe(1);
+  });
+});
+
+describe('ядра ◈', () => {
+  it('начисляются за бой и тратятся на топ-улучшения', () => {
+    const s = defaultSave();
+    s.crystals = 1000;
+    expect(canAfford(s, 'flak.incendiary')).toBe(false);
+    applyBattle(s, { sector: 3, win: true, crystals: 0, cores: 4, wavesDone: 8, stars: 3, kills: {}, seen: [] });
+    expect(s.cores).toBe(4);
+    const before = s.crystals;
+    expect(buyUpgrade(s, 'flak.incendiary')).toBe(true);
+    expect(s.cores).toBe(2);
+    expect(s.crystals).toBe(before);
+    expect(flakStats(s).damage).toBeCloseTo(8 * 1.2, 5);
   });
 });

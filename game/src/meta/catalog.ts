@@ -74,6 +74,8 @@ export interface UpgradeDef {
   values: number[];
   costs: number[];
   fmt: (v: number) => string;
+  /** чем платить: по умолчанию кристаллы, топ-улучшения — ядра ◈ */
+  currency?: 'cores';
 }
 
 export const UPGRADES: UpgradeDef[] = [
@@ -86,6 +88,8 @@ export const UPGRADES: UpgradeDef[] = [
   { key: 'laser.power', group: 'weap', requires: 'laser', name: 'Лазер: мощность', values: [40, 48, 56, 64, 72, 85], costs: [140, 220, 340, 500, 720], fmt: (v) => `${v} урона/с` },
   { key: 'tesla.links', group: 'weap', requires: 'tesla', name: 'Тесла: звенья', values: [3, 4, 4, 5, 5, 6], costs: [140, 220, 340, 500, 720], fmt: (v) => `${v} целей` },
   { key: 'drone.damage', group: 'weap', requires: 'drone', name: 'Дрон: урон', values: [6, 7, 8, 9, 10, 12], costs: [140, 220, 340, 500, 720], fmt: (v) => `${v} за выстрел` },
+  { key: 'flak.incendiary', group: 'flak', currency: 'cores', name: '◈ Зажигательные снаряды', values: [1, 1.2, 1.4, 1.6], costs: [2, 3, 5], fmt: (v) => `урон ×${v}` },
+  { key: 'hull.regen', group: 'hull', currency: 'cores', name: '◈ Самозаживление стекла', values: [0, 0.4, 0.8, 1.2], costs: [2, 3, 5], fmt: (v) => (v ? `+${v} корпуса/с` : 'нет') },
   { key: 'hull.armor', group: 'hull', name: 'Броня стекла', values: [100, 115, 130, 145, 160, 180], costs: [100, 180, 300, 460, 680], fmt: (v) => `корпус ${v}` },
 ];
 

@@ -10,7 +10,7 @@ import { LASER, TESLA } from './arms';
 import { HARPOON, REAPER } from './heavy';
 import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng } from './rng';
-import { BLINK, COLLECTOR, FLAK, JAM, PORTAL, World } from './world';
+import { BLINK, COLLECTOR, ELITE, FLAK, JAM, PORTAL, World } from './world';
 import { v3, type V3 } from './vec';
 
 const CAM = v3(0, 1.4, 0);
@@ -747,5 +747,21 @@ describe('доп. оружие', () => {
     run(w, 1.2);
     expect(thief.hp < thief.def.hp || thief.dead).toBe(true);
     expect(near.hp).toBe(near.def.hp);
+  });
+});
+
+describe('элита', () => {
+  it('изредка лёгкий враг — элита: ×2 здоровья, ядро за убийство; босс даёт 3 ядра', () => {
+    const w = make({ waves: [{ name: 't', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }] });
+    let elite = null;
+    for (let i = 0; i < 400 && !elite; i++) { const e = w.spawn('scout', 0); if (e.elite) elite = e; else e.dead = true; }
+    expect(elite).not.toBeNull();
+    expect(elite!.hp).toBe(ENEMIES.scout.hp * 2);
+    expect(ELITE.chance).toBeLessThan(0.1);
+    w.kill(elite!, true);
+    expect(w.stats.cores).toBe(1);
+    const boss = w.spawn('collector', 0);
+    w.kill(boss, true);
+    expect(w.stats.cores).toBe(4);
   });
 });

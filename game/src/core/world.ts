@@ -43,6 +43,8 @@ export interface WorldOptions {
   maxHull?: number;
   /** доп. оружие в слотах */
   weapons?: WeaponsOpt;
+  /** самозаживление стекла, корпуса в секунду */
+  regen?: number;
   /** Направление «вперёд» (рад., как atan2(x, z)): стрелки держатся в переднем полукруге. */
   front?: number;
 }
@@ -66,6 +68,8 @@ const SPARK_DAMAGE = 12;
 
 export const ROCKET = { lockTime: 0.6, speed0: 3, speed1: 8, turn: 5, damage: 45, splash: 1.3, splashDamage: 22, life: 5 };
 export const BOMB = { height: 1.6, period: 3.5, gravity: 3, blast: 0.6 };
+/** Элитные враги: шанс среди лёгких. */
+export const ELITE = { chance: 0.06 };
 export const EMP = { stun: 3, cone: 0.75, range: 16, reveal: 4 };
 /** Глушитель: импульс отключает ракеты и ЭМИ. */
 export const JAM = { period: 7, time: 3.5 };
@@ -104,7 +108,8 @@ export class World {
   private rocketHeld = false;
   private empHeld = false;
   weapon = { heat: 0, overheated: false, cd: 0 };
-  stats = { kills: 0, crystals: 0, shots: 0, hits: 0, cargoLost: 0, cargoTotal: 0 };
+  stats = { kills: 0, crystals: 0, cores: 0, shots: 0, hits: 0, cargoLost: 0, cargoTotal: 0 };
+  private regen = 0;
   /** сбито по видам врагов и какие виды встречены */
   killsBy: Record<string, number> = {};
   seen = new Set<string>();
@@ -130,6 +135,7 @@ export class World {
     this.waves = o.waves;
     this.defs = o.enemyDefs;
     this.front = o.front ?? 0;
+    this.regen = o.regen ?? 0;
     this.flak = { ...FLAK, ...(o.flak ?? {}) };
     if (o.weapons?.rockets) this.rocketState = { ammo: o.weapons.rockets.ammo, lockT: 0, lockId: null, locked: false };
     if (o.weapons?.emp) this.empState = { cd: 0, cooldown: o.weapons.emp.cooldown };
@@ -159,6 +165,7 @@ export class World {
     this.time += dt;
     this.player.pos = clone(input.camPos);
     this.jam = Math.max(0, this.jam - dt);
+    if (this.regen > 0) this.player.hull = Math.min(this.player.maxHull, this.player.hull + this.regen * dt);
 
     this.updateWeapon(dt, input);
     this.updateRockets(dt, input);
@@ -378,6 +385,8 @@ export class World {
       this.stats.kills++;
       this.killsBy[e.def.id] = (this.killsBy[e.def.id] ?? 0) + 1;
       this.stats.crystals += e.def.reward;
+      if (e.elite) this.stats.cores += 1;
+      if (e.def.cls === 'B') this.stats.cores += 3;
     }
     const size = e.def.cls === 'L' ? 0.5 : e.def.cls === 'M' ? 0.9 : 1.4;
     this.events.push({ type: 'enemyKilled', enemyId: e.id, pos: clone(e.pos), reward: byPlayer ? e.def.reward : 0, defId: e.def.id, byPlayer });
@@ -442,7 +451,10 @@ export class World {
 
   /** Враг вылезает из портала portalId (если его нет — портал открывается сразу). */
   spawn(defId: string, portalId = -1, at?: V3): Enemy {
-    const def = this.defs[defId];
+    let def = this.defs[defId];
+    // редкая элита среди лёгких: вдвое крепче, награда ×3 и ядро ◈
+    const elite = def.cls === 'L' && !at && this.rng() < ELITE.chance;
+    if (elite) def = { ...def, hp: def.hp * 2, reward: def.reward * 3, name: `${def.name} · элита` };
     this.seen.add(defId);
     let start: V3;
     let portalRef = -1;
@@ -463,7 +475,7 @@ export class World {
       state: 'emerge', t: 0, portal: portalRef, cargoId: null, targetCargo: null,
       fireCd: 2 + this.rng(), orbitAng: this.rng() * Math.PI * 2, falling: false, dead: false, stun: 0,
       exitId: null, cloak: 0, reveal: 0, noCloak: false, blinkCd: BLINK.period * (0.6 + 0.4 * this.rng()),
-      beamTo: null, phaseT: 0, cycle: 0, shielded: false, owner: null,
+      beamTo: null, phaseT: 0, cycle: 0, shielded: false, owner: null, elite,
     };
     e.yaw = Math.atan2(this.player.pos.x - e.pos.x, this.player.pos.z - e.pos.z);
     this.enemies.push(e);

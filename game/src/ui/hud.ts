@@ -6,7 +6,7 @@ export interface BattleView {
 }
 
 export interface EndInfo {
-  win: boolean; reason: string; kills: number; crystals: number; accuracy: number;
+  win: boolean; reason: string; kills: number; crystals: number; cores?: number; accuracy: number;
   cargoSaved: number; cargoTotal: number; hullLeft: number;
   stars: number; bonus: number; sector: number; sectorName: string; wave: number; waves: number;
   newEnemies: string[]; canUpgrade: boolean; hasNext: boolean; final?: boolean;
@@ -332,7 +332,7 @@ export class Hud {
         <tr><td>Груз спасён</td><td><b>${info.cargoSaved}/${info.cargoTotal}</b></td></tr>
         <tr><td>Корпус</td><td><b>${info.hullLeft}%</b></td></tr>
         <tr><td>Точность</td><td><b>${info.accuracy}%</b></td></tr></table>
-        <div class="col"><div class="reward">◆ ${info.crystals + info.bonus}${info.bonus ? `<div class="small mute">из них бонус за сектор ${info.bonus}</div>` : ''}</div>
+        <div class="col"><div class="reward">◆ ${info.crystals + info.bonus}${info.cores ? ` · ◈ ${info.cores}` : ''}${info.bonus ? `<div class="small mute">из них бонус за сектор ${info.bonus}</div>` : ''}</div>
         ${info.newEnemies.length ? `<button class="ghost" data-c="bestiary">Новые враги: ${info.newEnemies.join(', ')} ›</button>` : ''}</div>
       </div>
       ${advice ? `<div class="advice">${advice}</div>` : ''}

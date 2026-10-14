@@ -1,7 +1,7 @@
 import { ENEMIES } from '../data/enemies';
 import { BESTIARY, SECTORS, UPGRADES, WEAPONS, type SectorDef } from '../meta/catalog';
 import {
-  buyKit, buyUpgrade, buyWeapon, defaultSave, KIT, level, nextCost, storeSave, upgradeValue, type SaveData,
+  buyKit, buyUpgrade, buyWeapon, canAfford, defaultSave, KIT, level, nextCost, storeSave, upgradeValue, type SaveData,
 } from '../meta/save';
 
 export type ScreenName = 'splash' | 'menu' | 'campaign' | 'briefing' | 'arsenal' | 'hangar' | 'bestiary' | 'settings' | 'ending';
@@ -203,7 +203,7 @@ export class Screens {
       const now = u.values[l];
       const nxt = cost !== null ? u.values[l + 1] : null;
       return `<div class="card urow"><div class="grow"><b>${u.name}</b><div class="mute small">${u.fmt(now)}${nxt !== null ? ` → ${u.fmt(nxt)}` : ''}</div></div>
-        ${pips(l, max)}${cost === null ? '<button class="btn" disabled>МАКС</button>' : `<button class="btn" data-act="buyu" data-arg="${u.key}" ${this.save.crystals < cost ? 'disabled' : ''}>◆ ${cost}</button>`}</div>`;
+        ${pips(l, max)}${cost === null ? '<button class="btn" disabled>МАКС</button>' : `<button class="btn" data-act="buyu" data-arg="${u.key}" ${canAfford(this.save, u.key) ? '' : 'disabled'}>${u.currency === 'cores' ? '◈' : '◆'} ${cost}</button>`}</div>`;
     }).join('') + (this.tab === 'hull'
       ? `<div class="card urow"><div class="grow"><b>Ремкомплект</b><div class="mute small">между волнами: +${KIT.heal} корпуса и трещины затягиваются · в запасе ${this.save.kits}/${KIT.max}</div></div>
         <button class="btn" data-act="buykit" ${this.save.kits >= KIT.max || this.save.crystals < KIT.price ? 'disabled' : ''}>◆ ${KIT.price}</button></div>` : '');

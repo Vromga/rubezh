@@ -71,10 +71,18 @@ export function nextCost(s: SaveData, key: string): number | null {
   return l < u.costs.length ? u.costs[l] : null;
 }
 
+/** Хватает ли валюты на следующий уровень. */
+export function canAfford(s: SaveData, key: string): boolean {
+  const cost = nextCost(s, key);
+  const u = UPGRADES.find((x) => x.key === key)!;
+  return cost !== null && (u.currency === 'cores' ? s.cores : s.crystals) >= cost;
+}
+
 export function buyUpgrade(s: SaveData, key: string): boolean {
   const cost = nextCost(s, key);
-  if (cost === null || s.crystals < cost) return false;
-  s.crystals -= cost;
+  if (cost === null || !canAfford(s, key)) return false;
+  if (UPGRADES.find((x) => x.key === key)!.currency === 'cores') s.cores -= cost;
+  else s.crystals -= cost;
   s.upgrades[key] = level(s, key) + 1;
   return true;
 }
@@ -92,7 +100,7 @@ export function buyWeapon(s: SaveData, id: string): boolean {
 
 export function flakStats(s: SaveData) {
   return {
-    damage: upgradeValue(s, 'flak.damage'),
+    damage: upgradeValue(s, 'flak.damage') * upgradeValue(s, 'flak.incendiary'),
     rate: upgradeValue(s, 'flak.rate'),
     cooling: upgradeValue(s, 'flak.cooling'),
     spread: upgradeValue(s, 'flak.spread'),
@@ -112,6 +120,7 @@ export function weaponOpts(s: SaveData): WeaponsOpt {
 }
 
 export function maxHull(s: SaveData): number { return upgradeValue(s, 'hull.armor'); }
+export function hullRegen(s: SaveData): number { return upgradeValue(s, 'hull.regen'); }
 
 export function computeStars(win: boolean, cargoSaved: number, cargoTotal: number, hullFrac: number): number {
   if (!win) return 0;
@@ -120,6 +129,8 @@ export function computeStars(win: boolean, cargoSaved: number, cargoTotal: numbe
 
 export interface BattleResult {
   sector: number; win: boolean; crystals: number; wavesDone: number; stars: number;
+  /** ядра ◈ за элит и боссов */
+  cores?: number;
   kills: Record<string, number>; seen: string[];
 }
 
@@ -129,6 +140,7 @@ export function applyBattle(s: SaveData, r: BattleResult): { bonus: number; firs
   const firstWin = r.win && !(prev && prev.stars > 0);
   const bonus = r.win ? (firstWin ? 60 * r.sector : 15 * r.sector) : 0;
   s.crystals += r.crystals + bonus;
+  s.cores += r.cores ?? 0;
   s.sectors[r.sector] = {
     stars: Math.max(prev?.stars ?? 0, r.stars),
     bestWave: Math.max(prev?.bestWave ?? 0, r.wavesDone),

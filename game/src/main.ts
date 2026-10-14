@@ -7,7 +7,7 @@ import { World } from './core/world';
 import { v3, type V3 } from './core/vec';
 import { ENEMIES } from './data/enemies';
 import { SECTORS, UPGRADES } from './meta/catalog';
-import { applyBattle, computeStars, flakStats, KIT, loadSave, maxHull, nextCost, storeSave, weaponOpts } from './meta/save';
+import { applyBattle, canAfford, computeStars, flakStats, hullRegen, KIT, loadSave, maxHull, storeSave, weaponOpts } from './meta/save';
 import { Screens, type ScreenName } from './ui/screens';
 import { Sfx } from './audio/sfx';
 import { TESLA } from './core/arms';
@@ -405,7 +405,7 @@ function startBattle(): void {
   world = new World({
     seed, floorY, player: v3(cam.pos.x, cam.pos.y, cam.pos.z), cargo: cargoPos, zone,
     waves: sec.waves!, enemyDefs: ENEMIES, front: yaw0,
-    flak: flakStats(screens.save), maxHull: maxHull(screens.save), weapons: weaponOpts(screens.save),
+    flak: flakStats(screens.save), maxHull: maxHull(screens.save), weapons: weaponOpts(screens.save), regen: hullRegen(screens.save),
   });
   // ячейки в порядке слотов снаряжения, только взятое в бой
   const inBattle: Record<string, unknown> = { rockets: world.rocketState, emp: world.empState, laser: world.laserState, tesla: world.teslaState, drone: world.droneState };
@@ -534,18 +534,18 @@ function finish(ev: Extract<GameEvent, { type: 'end' }>): void {
   const stars = computeStars(win, cargoSaved, w.stats.cargoTotal, w.player.hull / w.player.maxHull);
   const before = new Set(Object.keys(save.seen));
   const res = applyBattle(save, {
-    sector: curSector, win, crystals: w.stats.crystals, stars,
+    sector: curSector, win, crystals: w.stats.crystals, cores: w.stats.cores, stars,
     wavesDone: win ? w.waveCount : Math.max(0, w.waveIdx), kills: w.killsBy, seen: [...w.seen],
   });
   storeSave(save);
   const newEnemies = [...w.seen].filter((id) => !before.has(id)).map((id) => ENEMIES[id].name);
-  const canUpgrade = UPGRADES.some((u) => { const c = nextCost(save, u.key); return c !== null && c <= save.crystals; });
+  const canUpgrade = UPGRADES.some((u) => canAfford(save, u.key) && (!u.requires || save.owned.includes(u.requires)));
   const next = SECTORS.find((x) => x.id === curSector + 1);
   setTimeout(() => {
     phase = 'end';
     hud.showBattle(false);
     hud.showEnd({
-      win, reason: ev.reason, kills: w.stats.kills, crystals: w.stats.crystals,
+      win, reason: ev.reason, kills: w.stats.kills, crystals: w.stats.crystals, cores: w.stats.cores,
       accuracy: w.stats.shots ? Math.round((w.stats.hits / w.stats.shots) * 100) : 0,
       cargoSaved, cargoTotal: w.stats.cargoTotal,
       hullLeft: Math.round((w.player.hull / w.player.maxHull) * 100),
