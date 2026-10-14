@@ -4,6 +4,8 @@ import { SECTOR1 } from '../data/sector1';
 import { SECTOR2 } from '../data/sector2';
 import { SECTOR3 } from '../data/sector3';
 import { SECTOR4 } from '../data/sector4';
+import { SECTOR5 } from '../data/sector5';
+import { CORE } from './finale';
 import { HARPOON, REAPER } from './heavy';
 import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng } from './rng';
@@ -528,7 +530,7 @@ function smartAim(x: World): V3 | null {
   const b = x.bolts[0];
   if (b) return b.pos;
   const vis = x.enemies.filter((e) => e.state !== 'emerge' && x.targetable(e));
-  const pri = ['sapper', 'repair', 'jammer', 'leviathan'];
+  const pri = ['sapper', 'repair', 'jammer', 'leviathan', 'node'];
   const t = vis.find((e) => e.cargoId !== null) ?? vis.find((e) => pri.includes(e.def.id)) ?? vis[0];
   return t ? clone3(t.pos) : null;
 }
@@ -636,5 +638,70 @@ describe('сектор 4', () => {
     run(w, 1800, smartAim, () => w.result !== null);
     expect(w.result).toBe('win');
     expect(w.killsBy.reaper).toBe(1);
+  });
+});
+
+describe('сектор 5', () => {
+  it('мотылёк ускоряет остальных воров', () => {
+    const w = make({ cargo: [v3(0, 0, 1)], waves: [{ name: 't', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }] });
+    const a = w.spawn('scout', 0); a.state = 'seek'; a.pos = v3(0, 1, 6);
+    run(w, 1);
+    const slow = 6 - a.pos.z;
+    const w2 = make({ cargo: [v3(0, 0, 1)], waves: [{ name: 't', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }] });
+    const b = w2.spawn('scout', 0); b.state = 'seek'; b.pos = v3(0, 1, 6);
+    const m = w2.spawn('moth', 0); m.state = 'seek'; m.pos = v3(3, 2, 8);
+    run(w2, 1);
+    expect(6 - b.pos.z).toBeGreaterThan(slow * 1.15);
+  });
+
+  it('болтун катит груз по полу', () => {
+    const w = make({ cargo: [v3(0, 0, 2)], waves: [{ name: 't', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }] });
+    const r = w.spawn('roller', 0); r.state = 'seek'; r.pos = v3(0, r.def.walk!, 2.5);
+    run(w, 3, () => null, () => w.cargo[0].state === 'carried');
+    expect(w.cargo[0].state).toBe('carried');
+    run(w, 1);
+    expect(w.cargo[0].pos.y).toBe(0);
+  });
+
+  it('клещ прилипает и через 5 с исчезает с грузом; сбитый — груз цел', () => {
+    const w = make({ cargo: [v3(0, 0, 2)], waves: [{ name: 't', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }] });
+    const t = w.spawn('tick', 0); t.state = 'carry'; t.cargoId = 1; w.cargo[0].state = 'carried';
+    run(w, 5.5);
+    expect(w.cargo[0].state).toBe('lost');
+    const w2 = make({ cargo: [v3(0, 0, 2)], waves: [{ name: 't', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }] });
+    const t2 = w2.spawn('tick', 0); t2.state = 'carry'; t2.cargoId = 1; w2.cargo[0].state = 'carried';
+    run(w2, 1);
+    t2.hp = 1;
+    w2.update(0.01, { firing: true, camPos: CAM, camDir: v3(t2.pos.x - CAM.x, t2.pos.y - CAM.y, t2.pos.z - CAM.z) });
+    expect(t2.dead).toBe(true);
+    run(w2, 2);
+    expect(w2.cargo[0].state).toBe('idle');
+  });
+
+  it('Хор-Ядро неуязвимо, пока живы узлы; без узлов открывается', () => {
+    const w = make({ waves: [{ name: 't', hint: '', spawns: [{ t: 999, enemy: 'scout' }] }] });
+    const c = w.spawn('nexus', 0); c.state = 'core';
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    const nodes = w.enemies.filter((e) => e.owner === c.id);
+    expect(nodes).toHaveLength(CORE.layers[0]);
+    expect(c.shielded).toBe(true);
+    const hp = c.hp;
+    c.pos = v3(0, 1.4, 5);
+    w.update(0.05, { firing: true, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(c.hp).toBe(hp);
+    for (const n of nodes) n.dead = true;
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    w.update(0.05, { firing: false, camPos: CAM, camDir: v3(0, 0, 1) });
+    expect(c.shielded).toBe(false);
+    run(w, CORE.open + 0.5);
+    expect(c.shielded).toBe(true);
+    expect(w.enemies.filter((e) => e.owner === c.id && !e.dead)).toHaveLength(CORE.layers[1]);
+  });
+
+  it('сектор 5 с Хор-Ядром проходим при точной стрельбе', () => {
+    const w = make({ cargo: [v3(1, 0, 1.5), v3(-1, 0, 1.5), v3(0, 0, -1.8), v3(1.5, 0, -1), v3(-1.5, 0, -1)], waves: SECTOR5, zone: FAR });
+    run(w, 2400, smartAim, () => w.result !== null);
+    expect(w.result).toBe('win');
+    expect(w.killsBy.nexus).toBe(1);
   });
 });

@@ -9,10 +9,10 @@ export interface EndInfo {
   win: boolean; reason: string; kills: number; crystals: number; accuracy: number;
   cargoSaved: number; cargoTotal: number; hullLeft: number;
   stars: number; bonus: number; sector: number; sectorName: string; wave: number; waves: number;
-  newEnemies: string[]; canUpgrade: boolean; hasNext: boolean;
+  newEnemies: string[]; canUpgrade: boolean; hasNext: boolean; final?: boolean;
 }
 
-export type EndChoice = 'next' | 'hangar' | 'retry' | 'menu' | 'bestiary';
+export type EndChoice = 'next' | 'hangar' | 'retry' | 'menu' | 'bestiary' | 'ending';
 
 /** Каркас кабины: стойки фонаря, верхняя дуга, приборная панель. Растягивается на весь экран. */
 const COCKPIT = `
@@ -51,6 +51,7 @@ export class Hud {
     root.innerHTML = `
       ${COCKPIT}
       <div class="night"></div>
+      <div class="space"></div>
       <div class="dmg"></div>
       <div class="bossbar" style="display:none"><b></b><div class="bar"><i></i></div></div>
       <div class="jammed" style="display:none">ПОМЕХИ · доп. оружие отключено</div>
@@ -102,6 +103,7 @@ export class Hud {
       this.firing = false;
       this.setBoss(null);
       this.setNight(false);
+      this.setSpace(false);
       this.setJam(false);
     }
   }
@@ -224,17 +226,21 @@ export class Hud {
   }
 
   /** Полоса здоровья босса (null — скрыть). */
-  setBoss(b: { name: string; frac: number; hidden: boolean } | null): void {
+  setBoss(b: { name: string; frac: number; hidden: boolean; shielded?: boolean } | null): void {
     const el = $(this.root, '.bossbar');
     el.style.display = b ? '' : 'none';
     if (!b) return;
-    $(el, 'b').textContent = b.hidden ? `${b.name.toUpperCase()} · СКРЫТ` : b.name.toUpperCase();
+    const tag = b.shielded ? ' · ЩИТ: сбей узлы' : b.hidden ? ' · СКРЫТ' : '';
+    $(el, 'b').textContent = b.name.toUpperCase() + tag;
     ($(el, 'i')).style.width = `${Math.max(0, b.frac) * 100}%`;
-    el.classList.toggle('hidden', b.hidden);
+    el.classList.toggle('hidden', b.hidden || !!b.shielded);
   }
 
   /** Ночной сектор: затемнение краёв. */
   setNight(on: boolean): void { $(this.root, '.night').classList.toggle('on', on); }
+
+  /** Орбита: фиолетовая дымка по краям. */
+  setSpace(on: boolean): void { $(this.root, '.space').classList.toggle('on', on); }
 
   setJam(on: boolean): void {
     $(this.root, '.jammed').style.display = on ? '' : 'none';
@@ -291,7 +297,8 @@ export class Hud {
       <div class="row">
         ${info.canUpgrade ? '<button class="gold" data-c="hangar">Можно улучшить ›</button>' : '<button class="ghost" data-c="hangar">Ангар</button>'}
         <span class="grow"></span><button class="ghost" data-c="retry">${info.win ? 'Повторить' : 'Ещё раз'}</button>
-        <button data-c="${info.win && info.hasNext ? 'next' : 'menu'}">${info.win && info.hasNext ? 'Дальше ›' : 'В меню'}</button>
+        ${info.win && info.final ? '<button class="gold" data-c="ending">Финал ›</button>'
+          : `<button data-c="${info.win && info.hasNext ? 'next' : 'menu'}">${info.win && info.hasNext ? 'Дальше ›' : 'В меню'}</button>`}
       </div></div>`;
     for (const b of e.querySelectorAll<HTMLElement>('[data-c]')) b.onclick = () => choose(b.dataset.c as EndChoice);
   }

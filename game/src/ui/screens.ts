@@ -4,7 +4,7 @@ import {
   buyUpgrade, buyWeapon, defaultSave, level, nextCost, storeSave, upgradeValue, type SaveData,
 } from '../meta/save';
 
-export type ScreenName = 'splash' | 'menu' | 'campaign' | 'briefing' | 'arsenal' | 'hangar' | 'bestiary' | 'settings';
+export type ScreenName = 'splash' | 'menu' | 'campaign' | 'briefing' | 'arsenal' | 'hangar' | 'bestiary' | 'settings' | 'ending';
 
 export interface ScreenHooks {
   startAR(sector: number): void;
@@ -22,7 +22,8 @@ const MARA_LINES = [
 
 const ICON_IDS: Record<string, string> = { scout: 'e-scout', spark: 'e-spark', grabber: 'e-grabber', shooter: 'e-shooter', shield: 'e-shield', bomber: 'e-bomber',
   jammer: 'e-jammer', repair: 'e-repair', jumper: 'e-jumper', ghost: 'e-ghost', collector: 'e-collector',
-  crab: 'e-crab', harpooner: 'e-harpooner', hive: 'e-hive', sapper: 'e-sapper', spitter: 'e-spitter', leviathan: 'e-leviathan', reaper: 'e-reaper' };
+  crab: 'e-crab', harpooner: 'e-harpooner', hive: 'e-hive', sapper: 'e-sapper', spitter: 'e-spitter', leviathan: 'e-leviathan', reaper: 'e-reaper',
+  spider: 'e-spider', moth: 'e-moth', roller: 'e-roller', tick: 'e-tick', hunter: 'e-hunter', nexus: 'e-nexus', node: 'e-nexus' };
 const icon = (id: string | undefined, cls = 'eicon') => `<svg class="${cls}" viewBox="0 0 60 40"><use href="#${id ? ICON_IDS[id] ?? 'e-unknown' : 'e-unknown'}"/></svg>`;
 const wIcon = (w: { id: string; icon: string }) => (w.id === 'rockets'
   ? '<svg class="wicon" viewBox="0 0 24 24"><use href="#w-rocket"/></svg>'
@@ -78,6 +79,7 @@ export class Screens {
       case 'arsenal': return this.arsenal();
       case 'hangar': return this.hangar();
       case 'bestiary': return this.bestiary();
+      case 'ending': return this.ending();
       case 'settings': return this.settings();
     }
   }
@@ -106,6 +108,7 @@ export class Screens {
           <button class="btn ghost" data-go="arsenal">Арсенал</button>
           <button class="btn ghost" data-go="hangar">Ангар</button>
           <button class="btn ghost" data-go="bestiary">Бестиарий</button>
+          ${this.save.sectors[5]?.stars ? '<button class="btn ghost" data-go="ending">Финал</button>' : ''}
         </div>
         <div class="small mute">${esc(this.arStatus)}</div>
       </div>
@@ -206,6 +209,30 @@ export class Screens {
       <div class="split"><div class="card pad center col">${preview}</div><div class="col list">${rows}</div></div>`;
   }
 
+  /** Финал: Мара предлагает выбор; от него зависят только последние слова. */
+  private ending(): string {
+    const e = this.save.ending;
+    const body = !e
+      ? `<p>«Ядро разбито. Флот Хора ослеп — без него Разломы держатся на честном слове. Я могу сделать одно из двух, Оператор.»</p>
+         <p>«Схлопнуть все Разломы разом. Хор никогда не найдёт дорогу обратно — и я тоже: часть меня останется по ту сторону.»</p>
+         <p>«Или оставить один Разлом открытым и забрать технологию Ядра. С ней Земля перестанет быть чьим-то складом. Но дверь будет открыта в обе стороны.»</p>
+         <div class="row wrap"><button class="btn big" data-act="ending" data-arg="close">Закрыть Разломы</button>
+         <button class="btn big ghost" data-act="ending" data-arg="take">Забрать технологию</button></div>`
+      : e === 'close'
+        ? `<p>«Разломы закрываются один за другим. В комнатах снова тихо — просто комнаты.»</p>
+           <p>«Колонисты возвращаются домой. Я… остаюсь с той стороны. Не грусти, Оператор-7. Ты сделал то, ради чего тебя звали Рубежом.»</p>
+           <p class="accent">Связь потеряна. Земля свободна.</p>`
+        : `<p>«Технология Ядра у нас. Энергия, щиты, порталы — всё, чем Хор нас „инвентаризировал“.»</p>
+           <p>«Один Разлом остаётся открытым. Пусть Хор знает: теперь за ним следят с этой стороны. Я рядом, Оператор-7. Мы только начали.»</p>
+           <p class="accent">Рубеж стоит. Разлом под охраной.</p>`;
+    return `<div class="s-bg menu-bg"><div class="portal-deco"></div></div>${this.top('ФИНАЛ', 'menu')}
+      <div class="card pad col" style="max-width:44em;margin:0 auto">
+        <div class="row top"><div class="mara"></div><div><b class="accent">Мара</b>${body}</div></div>
+        ${e ? `<div class="mute small">Спасибо за игру! Сектора можно перепройти на три звезды, а в Бестиарии — открыть всех ${BESTIARY.length}.</div>
+        <div class="row wrap"><button class="btn" data-go="menu">В меню</button><button class="btn ghost" data-act="ending" data-arg="">Выбрать заново</button></div>` : ''}
+      </div>`;
+  }
+
   private bestiary(): string {
     const open = (b: typeof BESTIARY[number]) => !!(b.enemyId && this.save.seen[b.enemyId]);
     const cnt = BESTIARY.filter(open).length;
@@ -251,6 +278,11 @@ export class Screens {
       case 'buyw': if (arg && buyWeapon(this.save, arg)) { this.persist(); this.show(); } break;
       case 'buyu': if (arg && buyUpgrade(this.save, arg)) { this.persist(); this.show(); } break;
       case 'tab': this.tab = arg as 'flak' | 'hull' | 'weap'; this.show(); break;
+      case 'ending':
+        this.save.ending = arg === 'close' || arg === 'take' ? arg : undefined;
+        this.persist();
+        this.show();
+        break;
       case 'slot': {
         const i = Number(arg);
         const ready = WEAPONS.filter((w) => w.id !== 'flak' && w.ready && this.save.owned.includes(w.id)).map((w) => w.id);

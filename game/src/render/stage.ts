@@ -14,7 +14,10 @@ interface EView {
   fade: { m: THREE.Material; opacity: number; transparent: boolean }[];
   vis: number;
   beam?: THREE.Mesh;
+  bubble?: THREE.Mesh;
 }
+
+const BUBBLE_GEO = new THREE.SphereGeometry(1, 32, 20);
 
 const BEAM_GEO = new THREE.CylinderGeometry(0.012, 0.012, 1, 6, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2);
 
@@ -168,7 +171,8 @@ export class Stage {
         else if (frac < 0.34) { m.mat.emissive.lerp(new THREE.Color(0xff2200), 0.6); m.mat.emissiveIntensity = Math.max(m.ei, 0.5 + Math.sin(this.t * 12) * 0.3); }
       }
       this.applyCloak(ev, e.cloak, dt);
-      this.syncBeam(ev, e.beamTo);
+      this.syncBeam(ev, e.beamTo, e.def.id === 'node' ? 0xd070ff : 0x3dff8a);
+      this.syncBubble(ev, e.shielded, e.def.radius * (e.def.scale ?? 1) * 1.15);
       // анимация после сброса материалов: мигалки и пульс ядра не затираются
       if (ev.flash <= 0) ev.view.anim(this.t + e.id);
       if (ev.view.charge) {
@@ -283,6 +287,7 @@ export class Stage {
     if (!v) return;
     this.root.remove(v.view.group);
     if (v.beam) this.root.remove(v.beam);
+    if (v.bubble) this.root.remove(v.bubble);
     this.enemies.delete(id);
   }
 
@@ -302,11 +307,25 @@ export class Stage {
   }
 
   /** Луч ремонтника к союзнику. */
-  private syncBeam(ev: EView, to: number | null): void {
+  /** Щит Хор-Ядра: переливающаяся сфера, пока живы узлы. */
+  private syncBubble(ev: EView, on: boolean, r: number): void {
+    if (!on) { if (ev.bubble) ev.bubble.visible = false; return; }
+    if (!ev.bubble) {
+      ev.bubble = new THREE.Mesh(BUBBLE_GEO, new THREE.MeshBasicMaterial({ color: 0xd070ff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, wireframe: true }));
+      this.root.add(ev.bubble);
+    }
+    ev.bubble.visible = true;
+    ev.bubble.position.copy(ev.view.group.position);
+    ev.bubble.scale.setScalar(r * (1 + Math.sin(this.t * 4) * 0.03));
+    ev.bubble.rotation.y = this.t * 0.4;
+    (ev.bubble.material as THREE.MeshBasicMaterial).opacity = 0.15 + Math.sin(this.t * 6) * 0.05;
+  }
+
+  private syncBeam(ev: EView, to: number | null, color = 0x3dff8a): void {
     const target = to === null ? undefined : this.enemies.get(to);
     if (!target) { if (ev.beam) ev.beam.visible = false; return; }
     if (!ev.beam) {
-      ev.beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: 0x3dff8a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+      ev.beam = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
       this.root.add(ev.beam);
     }
     const a = ev.view.group.position;

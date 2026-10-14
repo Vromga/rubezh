@@ -734,6 +734,168 @@ export function buildEnemy(def: EnemyDef): EnemyView {
       beamM.emissiveIntensity = 1.2 + Math.sin(t * 5) * 0.5;
     };
     view.charge = (k) => { for (const g of guns) g.emissiveIntensity = 0.3 + k * 4; };
+  } else if (def.id === 'spider') {
+    // паук: брюшко, головогрудь с глазами, по четыре лапы с каждой стороны
+    const body = new THREE.Group();
+    const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), hull(0x3a3f48));
+    abdomen.scale.set(1, 0.75, 1.25); abdomen.position.z = -0.08;
+    const mark = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), mat(RED, RED, 1.8, 0)); mark.scale.set(1, 0.4, 1.4); mark.position.set(0, 0.06, -0.08);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), hull(0x4a505a)); head.position.z = 0.05;
+    const eyes = [-0.025, 0, 0.025].map((x) => { const e = new THREE.Mesh(new THREE.SphereGeometry(0.01, 6, 4), mat(RED, RED, 2.5, 0)); e.position.set(x, 0.025, 0.1); return e; });
+    body.add(abdomen, mark, head, ...eyes);
+    place('body', body);
+    const legs: THREE.Group[] = [];
+    for (const [id, sx] of [['legL', -1], ['legR', 1]] as const) {
+      const g = new THREE.Group();
+      for (let i = 0; i < 4; i++) {
+        const l = new THREE.Group();
+        const up = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.1, 5), hull(0x5a606a));
+        up.rotation.z = sx * 1.1; up.position.set(sx * 0.04, 0.025, 0);
+        const lo = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.003, 0.11, 5), dark());
+        lo.position.set(sx * 0.09, -0.02, 0); lo.rotation.z = sx * -0.35;
+        l.add(up, lo); l.position.z = 0.06 - i * 0.045; l.rotation.y = sx * (0.5 - i * 0.33);
+        g.add(l); legs.push(l);
+      }
+      place(id, g);
+    }
+    view.anim = (t) => { legs.forEach((l, i) => { l.rotation.x = Math.sin(t * 16 + i * 1.3) * 0.3; }); };
+  } else if (def.id === 'moth') {
+    // мотылёк: пушистое тельце, большие светящиеся крылья-«глаза»
+    const body = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.025, 0.1, 4, 10).rotateX(Math.PI / 2), mat(0x6a5a7a, 0, 0, 0.2, 0.8));
+    const ants = [-1, 1].map((sx) => { const a = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.07, 4), dark()); a.position.set(sx * 0.015, 0.03, 0.08); a.rotation.set(0.7, 0, sx * -0.4); return a; });
+    body.add(torso, ...ants);
+    place('body', body);
+    const wings: THREE.Group[] = [];
+    for (const [id, sx] of [['wingL', -1], ['wingR', 1]] as const) {
+      const g = new THREE.Group();
+      const wm = new THREE.MeshStandardMaterial({ color: 0xd0b8ff, emissive: 0x8a5aff, emissiveIntensity: 0.9, transparent: true, opacity: 0.8, side: THREE.DoubleSide, roughness: 0.6 });
+      const w = new THREE.Mesh(new THREE.CircleGeometry(0.11, 18), wm);
+      w.scale.set(1, 0.75, 1); w.rotation.x = -Math.PI / 2; w.position.x = sx * 0.02;
+      const eye = new THREE.Mesh(new THREE.CircleGeometry(0.03, 12), mat(0xffe08a, 0xffb03a, 2, 0));
+      (eye.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      eye.rotation.x = -Math.PI / 2; eye.position.set(sx * 0.03, 0.002, 0);
+      g.add(w, eye);
+      wings.push(g);
+      place(id, g);
+    }
+    const halo = glow(0xb38aff, 0.5, 0.4);
+    body.add(halo);
+    view.anim = (t) => { wings.forEach((w, i) => { w.rotation.z = Math.sin(t * 22 + i * Math.PI) * 0.8; }); halo.material.opacity = 0.3 + Math.sin(t * 5) * 0.15; };
+  } else if (def.id === 'roller') {
+    // болтун: бронированный шар-колесо с люком сверху
+    const body = new THREE.Group();
+    const ball = new THREE.Group();
+    const shellM = hull(0x6a5040);
+    ball.add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 14), shellM));
+    for (let i = 0; i < 3; i++) { const band = new THREE.Mesh(new THREE.TorusGeometry(0.122, 0.008, 6, 28), mat(0xffb03a, 0x553300, 0.6, 0.3, 0.4)); band.rotation.y = (i * Math.PI) / 3; ball.add(band); }
+    body.add(ball);
+    place('body', body);
+    const hatch = new THREE.Group();
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.025, 14), hull(0x8a95a3));
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), mat(RED, RED, 2.4, 0)); eye.position.y = 0.015;
+    hatch.add(lid, eye);
+    place('hatch', hatch);
+    for (const id of ['sideL', 'sideR']) {
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 14).rotateZ(Math.PI / 2), hull(0x4a5562));
+      place(id, hub);
+    }
+    view.anim = (t) => { ball.rotation.x = t * 6; };
+  } else if (def.id === 'tick') {
+    // клещ: плоское панцирное тельце, хоботок, короткие сильные лапки
+    const body = new THREE.Group();
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 10), mat(0x5a2a2a, 0x200808, 0.3, 0.5, 0.35));
+    shell.scale.set(1, 0.5, 1.2);
+    const plate = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hull(0x7a3a3a));
+    plate.scale.set(1, 0.5, 1.1); plate.position.y = 0.02;
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.06, 6).rotateX(Math.PI / 2), dark()); beak.position.z = 0.1;
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 4), mat(0xff8a2a, 0xff6a00, 2.5, 0)); eye.position.set(0, 0.03, 0.07);
+    body.add(shell, plate, beak, eye);
+    place('body', body);
+    const legs = new THREE.Group();
+    const parts: THREE.Mesh[] = [];
+    for (let i = 0; i < 6; i++) {
+      const sx = i < 3 ? -1 : 1;
+      const l = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.004, 0.08, 5), dark());
+      l.position.set(sx * 0.07, 0, 0.04 - (i % 3) * 0.04); l.rotation.z = sx * 1.1;
+      legs.add(l); parts.push(l);
+    }
+    place('legs', legs);
+    view.anim = (t) => { parts.forEach((l, i) => { l.rotation.x = Math.sin(t * 12 + i) * 0.4; }); };
+    view.charge = (k) => { (eye.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.5 + k * 5; body.scale.setScalar(1 + k * 0.15); };
+  } else if (def.id === 'hunter') {
+    // охотник: двуногий шагоход с кабиной-головой и манипулятором
+    const body = new THREE.Group();
+    const torso = box(0.22, 0.18, 0.18, hull(0x5a6472), 0.04);
+    const pack = box(0.16, 0.14, 0.08, hull(0x3a424c), 0.02); pack.position.z = -0.12;
+    const b1 = beacon(0xff4a3a, 0.012); b1.obj.position.set(0, 0.06, -0.17);
+    body.add(torso, pack, b1.obj);
+    place('body', body);
+    const head = new THREE.Group();
+    const dome = box(0.12, 0.08, 0.1, hull(0x6a7482), 0.03);
+    const visor = box(0.1, 0.025, 0.01, mat(RED, RED, 2.2, 0.2, 0.2), 0.005); visor.position.z = 0.052;
+    head.add(dome, visor);
+    place('head', head);
+    const arm = new THREE.Group();
+    const a = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8), hull(0x8a95a3)); a.position.y = -0.06;
+    const claw = box(0.05, 0.04, 0.05, hull(0xb5bfcc)); claw.position.y = -0.15;
+    arm.add(a, claw);
+    place('arm', arm);
+    const legs: THREE.Group[] = [];
+    for (const id of ['legL', 'legR']) {
+      const g = new THREE.Group();
+      const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.16, 8), hull(0x6a7482)); thigh.position.y = 0.06; thigh.rotation.x = 0.3;
+      const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.02, 0.17, 8), hull(0x4a5562)); shin.position.set(0, -0.08, 0.02); shin.rotation.x = -0.3;
+      const foot = box(0.06, 0.02, 0.1, dark()); foot.position.set(0, -0.16, 0.03);
+      g.add(thigh, shin, foot);
+      legs.push(g);
+      place(id, g);
+    }
+    view.anim = (t) => { legs.forEach((l, i) => { l.rotation.x = Math.sin(t * 5 + i * Math.PI) * 0.4; }); body.position.y = Math.abs(Math.sin(t * 5)) * 0.015; b1.set(Math.sin(t * 4) > 0.5 ? 1 : 0); };
+  } else if (def.id === 'node') {
+    // узел щита: кристалл-пилон в кольцах, питает Ядро лучом
+    const body = new THREE.Group();
+    const cm = mat(0xc890ff, 0xa040ff, 1.8, 0.1, 0.15);
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 0), cm);
+    crystal.scale.set(0.8, 1.5, 0.8);
+    const rings: THREE.Mesh[] = [];
+    for (let i = 0; i < 2; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.17 + i * 0.04, 0.01, 6, 28), hull(0x9aa5b3)); rings.push(r); body.add(r); }
+    body.add(crystal, glow(0xb36bff, 0.7, 0.5));
+    place('body', body);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), mat(RED, RED, 2.5, 0));
+    place('eye', eye);
+    view.anim = (t) => { crystal.rotation.y = t * 1.5; rings[0].rotation.x = t * 1.2; rings[1].rotation.y = t * 0.9; cm.emissiveIntensity = 1.5 + Math.sin(t * 4) * 0.5; };
+    view.charge = (k) => { (eye.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.5 + k * 5; };
+  } else if (def.id === 'nexus') {
+    // Хор-Ядро: пульсирующая сфера-«мозг» в вращающихся кольцах с шипами
+    const body = new THREE.Group();
+    const coreM = mat(0xff5ad0, 0xb02aff, 1.6, 0.2, 0.25);
+    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 3), coreM);
+    const cage = new THREE.Mesh(new THREE.IcosahedronGeometry(0.47, 1), new THREE.MeshStandardMaterial({ color: 0x9aa5b3, metalness: 0.9, roughness: 0.3, wireframe: true }));
+    const rings: THREE.Group[] = [];
+    for (let i = 0; i < 3; i++) {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.TorusGeometry(0.62 + i * 0.1, 0.02, 8, 64), hull(0x5a6472)));
+      for (let k = 0; k < 8; k++) {
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.12, 6), hull(0x8a95a3));
+        const a = (k / 8) * Math.PI * 2;
+        spike.position.set(Math.cos(a) * (0.62 + i * 0.1), Math.sin(a) * (0.62 + i * 0.1), 0);
+        spike.rotation.z = a - Math.PI / 2;
+        g.add(spike);
+      }
+      g.rotation.set(i * 1.1, i * 0.7, 0);
+      rings.push(g); body.add(g);
+    }
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 10), mat(RED, RED, 3, 0)); eye.position.z = 0.38;
+    body.add(core, cage, eye, glow(0xd070ff, 2.2, 0.45));
+    place('body', body);
+    view.anim = (t) => {
+      rings.forEach((r, i) => { r.rotation.x += 0.004 * (i + 1); r.rotation.y += 0.006 * (3 - i); });
+      cage.rotation.y = -t * 0.3;
+      const pulse = 1 + Math.sin(t * 3) * 0.04;
+      core.scale.setScalar(pulse);
+      coreM.emissiveIntensity = 1.3 + Math.sin(t * 3) * 0.5;
+    };
   }
   track(view, view.group);
   return view;

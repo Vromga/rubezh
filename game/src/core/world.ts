@@ -1,3 +1,4 @@
+import { stepCore, stepNode } from './finale';
 import { stepAcid, stepHarpoon, stepHive, stepReaper, stepStomper, updateTethers } from './heavy';
 import { pickPortalPos, type PortalZone } from './portals';
 import { makeRng, type Rng } from './rng';
@@ -301,6 +302,10 @@ export class World {
   }
 
   /** @internal */ damage(e: Enemy, part: PartState, dmg: number, point: V3, pierce = false): void {
+    if (e.shielded) {
+      this.events.push({ type: 'enemyHit', enemyId: e.id, partId: 'shield', point, weak: false });
+      return;
+    }
     // фронтальный щит принимает на себя всё, кроме ракет
     const shield = e.parts.find((p) => p.def.kind === 'shield' && p.alive);
     if (shield && !pierce) part = shield;
@@ -349,6 +354,7 @@ export class World {
     for (const th of this.tethers.filter((x) => x.enemyId === e.id)) this.cutTether(th, e.pos);
     this.dropCargo(e);
     if (e.def.blast) this.blast(e);
+    for (const n of this.enemies) if (n.owner === e.id && !n.dead) this.kill(n, byPlayer);
     if (byPlayer) {
       this.stats.kills++;
       this.killsBy[e.def.id] = (this.killsBy[e.def.id] ?? 0) + 1;
@@ -438,7 +444,7 @@ export class World {
       state: 'emerge', t: 0, portal: portalRef, cargoId: null, targetCargo: null,
       fireCd: 2 + this.rng(), orbitAng: this.rng() * Math.PI * 2, falling: false, dead: false, stun: 0,
       exitId: null, cloak: 0, reveal: 0, noCloak: false, blinkCd: BLINK.period * (0.6 + 0.4 * this.rng()),
-      beamTo: null, phaseT: 0, cycle: 0,
+      beamTo: null, phaseT: 0, cycle: 0, shielded: false, owner: null,
     };
     e.yaw = Math.atan2(this.player.pos.x - e.pos.x, this.player.pos.z - e.pos.z);
     this.enemies.push(e);
@@ -460,7 +466,7 @@ export class World {
       if (e.t >= 0.7) {
         const first: Record<string, Enemy['state']> = {
           shooter: 'orbit', kamikaze: 'attack', bomber: 'bomb', jammer: 'jam', repair: 'repair', boss: 'boss',
-          harpoon: 'harpoon', hive: 'hive', acid: 'acid', stomper: 'stomp', reaper: 'reaper',
+          harpoon: 'harpoon', hive: 'hive', acid: 'acid', stomper: 'stomp', reaper: 'reaper', core: 'core', node: 'node',
         };
         e.state = first[e.def.behavior] ?? 'seek';
       }
@@ -484,7 +490,12 @@ export class World {
       if (e.pos.y <= this.floorY + 0.08) this.kill(e, e.def.cls === 'B' || !!e.def.walk);
       return;
     }
-    const speed = e.def.speed * (1 - (engines.length ? 0.45 * (lost / engines.length) : 0));
+    let speed = e.def.speed * (1 - (engines.length ? 0.45 * (lost / engines.length) : 0));
+    // мотылёк «подсвечивает» груз: остальные воры летят быстрее
+    if (e.def.behavior === 'thief' && !e.def.buff) {
+      const scout = this.enemies.find((o) => o.def.buff && !o.dead && o.state !== 'emerge');
+      if (scout) speed *= 1 + scout.def.buff!;
+    }
     switch (e.state) {
       case 'seek': this.stepSeek(e, speed, dt); break;
       case 'carry': this.stepCarry(e, speed * 0.85, dt); break;
@@ -500,6 +511,8 @@ export class World {
       case 'acid': stepAcid(this, e, speed, dt); break;
       case 'stomp': stepStomper(this, e, speed, dt); break;
       case 'reaper': stepReaper(this, e, speed, dt); break;
+      case 'core': stepCore(this, e, speed, dt); break;
+      case 'node': stepNode(this, e, dt); break;
       default: break;
     }
   }
@@ -535,20 +548,40 @@ export class World {
     if (!c) { e.state = 'flee'; return; }
     const target = v3(c.pos.x, c.pos.y + 0.4, c.pos.z);
     this.tryBlink(e, target, dt);
-    this.flyTo(e, target, speed, dt);
+    this.flyTo(e, target, speed, dt, e.def.zigzag ?? 0.4);
     if (distXZ(e.pos, target) < (e.def.walk ? 0.35 : 0.22) && (e.def.walk || Math.abs(e.pos.y - target.y) < 0.25)) {
       c.state = 'carried';
       e.cargoId = c.id;
       e.state = 'carry';
+      e.phaseT = 0;
       this.events.push({ type: 'cargoGrabbed', cargoId: c.id, pos: clone(c.pos) });
     }
   }
 
+  /** Клещ сидит на грузе и через latch секунд исчезает вместе с ним. */
+  private stepLatch(e: Enemy, dt: number): void {
+    const c = this.cargoOf(e.cargoId);
+    if (!c) { e.state = 'flee'; return; }
+    e.pos = v3(c.pos.x, c.pos.y + 0.14, c.pos.z);
+    e.phaseT += dt;
+    const L = e.def.latch!;
+    if (e.phaseT >= L - 1 && e.phaseT - dt < L - 1) this.events.push({ type: 'telegraph', enemyId: e.id, pos: clone(e.pos) });
+    if (e.phaseT < L) return;
+    c.state = 'lost';
+    this.stats.cargoLost++;
+    this.events.push({ type: 'cargoLost', cargoId: c.id, pos: clone(c.pos) });
+    this.events.push({ type: 'blink', enemyId: e.id, from: clone(e.pos), to: clone(e.pos) });
+    e.cargoId = null;
+    e.dead = true;
+    this.events.push({ type: 'enemyEscaped', enemyId: e.id });
+  }
+
   private stepCarry(e: Enemy, speed: number, dt: number): void {
+    if (e.def.latch) { this.stepLatch(e, dt); return; }
     const exit = this.exitFor(e);
     const p = exit.pos;
     this.tryBlink(e, p, dt);
-    this.flyTo(e, p, speed, dt, 0.15);
+    this.flyTo(e, p, speed, dt, e.def.zigzag ? e.def.zigzag / 2 : 0.15);
     if ((e.def.walk ? distXZ(e.pos, p) : dist(e.pos, p)) < PORTAL.enter && exit.state !== 'opening') {
       this.closePortal(exit);
       const c = this.cargoOf(e.cargoId);
@@ -647,15 +680,16 @@ export class World {
   /** Прыгун мерцает и перескакивает ближе к цели. */
   private tryBlink(e: Enemy, target: V3, dt: number): void {
     if (!e.def.blink) return;
+    const hop = e.def.hop ?? BLINK;
     e.blinkCd -= dt;
     if (e.blinkCd <= BLINK.warn && e.blinkCd + dt > BLINK.warn) this.events.push({ type: 'telegraph', enemyId: e.id, pos: clone(e.pos) });
     if (e.blinkCd > 0) return;
-    e.blinkCd = BLINK.period;
+    e.blinkCd = hop.period;
     const to = sub(target, e.pos);
     const d = Math.hypot(to.x, to.y, to.z);
     if (d < 0.6) return;
     const from = clone(e.pos);
-    e.pos = add(e.pos, mul(norm(to), Math.min(BLINK.dist, d - 0.4)));
+    e.pos = add(e.pos, mul(norm(to), Math.min(hop.dist, d - 0.4)));
     this.events.push({ type: 'blink', enemyId: e.id, from, to: clone(e.pos) });
   }
 
@@ -945,7 +979,14 @@ export class World {
     for (const c of this.cargo) {
       if (c.state === 'carried') {
         const e = this.enemies.find((x) => x.cargoId === c.id && !x.dead);
-        if (e && !this.tethers.some((t) => t.cargoId === c.id)) c.pos = e.def.walk ? v3(e.pos.x, e.pos.y + 0.3, e.pos.z) : v3(e.pos.x, e.pos.y - 0.4, e.pos.z);
+        if (e && !this.tethers.some((t) => t.cargoId === c.id)) {
+          if (e.def.push) {
+            // болтун катит груз перед собой по полу
+            const f = norm(v3(e.vel.x, 0, e.vel.z));
+            c.pos = v3(e.pos.x + f.x * 0.22, this.floorY, e.pos.z + f.z * 0.22);
+          } else if (e.def.latch) c.pos = v3(c.pos.x, this.floorY, c.pos.z);
+          else c.pos = e.def.walk ? v3(e.pos.x, e.pos.y + 0.3, e.pos.z) : v3(e.pos.x, e.pos.y - 0.4, e.pos.z);
+        }
       } else if (c.state === 'falling') {
         c.vy -= 6 * dt;
         c.pos.y += c.vy * dt;

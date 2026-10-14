@@ -15,6 +15,8 @@ export interface SaveData {
   /** враги: сколько сбито; ключ — id врага */
   seen: Record<string, { kills: number; first: string }>;
   settings: Settings;
+  /** выбор в финале: закрыть Разломы или забрать технологию */
+  ending?: 'close' | 'take';
 }
 
 const KEY = 'rubezh.save.v1';

@@ -2,7 +2,7 @@ import type { V3 } from './vec';
 
 export type PartKind = 'core' | 'armor' | 'engine' | 'weapon' | 'grabber' | 'sensor' | 'shield';
 export type Behavior = 'thief' | 'kamikaze' | 'shooter' | 'bomber' | 'jammer' | 'repair' | 'boss'
-  | 'harpoon' | 'hive' | 'acid' | 'stomper' | 'reaper';
+  | 'harpoon' | 'hive' | 'acid' | 'stomper' | 'reaper' | 'core' | 'node';
 
 export interface PartDef { id: string; kind: PartKind; hp: number; off: V3; r: number }
 
@@ -29,12 +29,22 @@ export interface EnemyDef {
   walk?: number;
   /** взрыв при гибели: радиус и урон по соседям */
   blast?: { r: number; dmg: number };
+  /** размах зигзага в полёте (мотылёк) */
+  zigzag?: number;
+  /** прилипает к грузу на N секунд и исчезает с ним (клещ) */
+  latch?: number;
+  /** катит груз по полу перед собой (болтун) */
+  push?: boolean;
+  /** пока жив — остальные воры быстрее на эту долю (мотылёк) */
+  buff?: number;
+  /** параметры прыжков, если отличаются от прыгуна */
+  hop?: { period: number; dist: number };
 }
 
 export interface PartState { def: PartDef; hp: number; alive: boolean }
 
 export type EnemyState = 'emerge' | 'seek' | 'carry' | 'flee' | 'orbit' | 'attack' | 'bomb' | 'jam' | 'repair' | 'boss'
-  | 'harpoon' | 'reel' | 'hive' | 'acid' | 'stomp' | 'reaper';
+  | 'harpoon' | 'reel' | 'hive' | 'acid' | 'stomp' | 'reaper' | 'core' | 'node';
 
 export interface Enemy {
   id: number;
@@ -71,6 +81,10 @@ export interface Enemy {
   phaseT: number;
   /** номер цикла босса */
   cycle: number;
+  /** под щитом: урон не проходит (Хор-Ядро, пока живы узлы) */
+  shielded: boolean;
+  /** кому принадлежит (узел → ядро) */
+  owner: number | null;
 }
 
 /** Портал: 'in' — вторжение (открывается заранее), 'out' — уход (открывается перед бегством). */

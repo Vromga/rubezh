@@ -329,6 +329,7 @@ function startBattle(): void {
   transient.length = 0;
   phase = 'battle';
   hud.setNight(curSector === 3 || curSector === 4);
+  hud.setSpace(curSector === 5);
   acid.clear();
   hud.say('Мара: порталы откроются перед тобой. Стрелки по краям подскажут, откуда угроза.', 6000);
 }
@@ -450,7 +451,7 @@ function finish(ev: Extract<GameEvent, { type: 'end' }>): void {
       hullLeft: Math.round((w.player.hull / w.player.maxHull) * 100),
       stars, bonus: res.bonus, sector: curSector, sectorName: sec.name,
       wave: Math.max(1, w.waveIdx + 1), waves: w.waveCount,
-      newEnemies, canUpgrade, hasNext: !!(next && next.waves),
+      newEnemies, canUpgrade, hasNext: !!(next && next.waves), final: curSector === SECTORS[SECTORS.length - 1].id,
     }, (c) => exitBattle(c));
   }, win ? 800 : 3000);
 }
@@ -462,6 +463,7 @@ function exitBattle(c: EndChoice | 'menu'): void {
     retry: { name: 'briefing', arg: curSector },
     hangar: { name: 'hangar' },
     bestiary: { name: 'bestiary' },
+    ending: { name: 'ending' },
     menu: { name: 'menu' },
   };
   pendingScreen = map[c] ?? map.menu;
@@ -621,7 +623,7 @@ renderer.setAnimationLoop((t, frame) => {
     );
     hud.setJam(world.jam > 0 && !!(world.rocketState || world.empState));
     const boss = world.enemies.find((e) => e.def.cls === 'B');
-    hud.setBoss(boss ? { name: boss.def.name, frac: boss.hp / boss.def.hp, hidden: boss.cloak > 0.6 } : null);
+    hud.setBoss(boss ? { name: boss.def.name, frac: boss.hp / boss.def.hp, hidden: boss.cloak > 0.6, shielded: boss.shielded } : null);
     hud.update({
       wave: world.waveIdx, waves: world.waveCount, left: world.enemies.length,
       hull: world.player.hull, heat: world.weapon.heat, overheated: world.weapon.overheated,

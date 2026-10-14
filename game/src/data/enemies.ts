@@ -178,4 +178,60 @@ export const ENEMIES: Record<string, EnemyDef> = {
       { id: 'engR', kind: 'engine', hp: 220, off: v3(0.72, 0.1, -0.35), r: 0.18 },
     ],
   },
+  spider: {
+    id: 'spider', name: 'Паук-крадун', cls: 'L', hp: 22, speed: 0.8, radius: 0.3, behavior: 'thief', reward: 5, scale: S, walk: 0.1,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.12 },
+      { id: 'legL', kind: 'engine', hp: 8, off: v3(-0.14, -0.03, 0), r: 0.09 },
+      { id: 'legR', kind: 'engine', hp: 8, off: v3(0.14, -0.03, 0), r: 0.09 },
+    ],
+  },
+  moth: {
+    id: 'moth', name: 'Мотылёк', cls: 'L', hp: 10, speed: 0.9, radius: 0.3, behavior: 'thief', reward: 5, scale: S, zigzag: 1.6, buff: 0.25,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.08 },
+      { id: 'wingL', kind: 'engine', hp: 5, off: v3(-0.14, 0.02, 0), r: 0.11 },
+      { id: 'wingR', kind: 'engine', hp: 5, off: v3(0.14, 0.02, 0), r: 0.11 },
+    ],
+  },
+  roller: {
+    id: 'roller', name: 'Болтун', cls: 'L', hp: 30, speed: 0.55, radius: 0.3, behavior: 'thief', reward: 6, scale: S, walk: 0.12, push: true,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.13 },
+      { id: 'hatch', kind: 'sensor', hp: 8, off: v3(0, 0.11, 0), r: 0.07 },
+      { id: 'sideL', kind: 'armor', hp: 30, off: v3(-0.11, 0, 0), r: 0.08 },
+      { id: 'sideR', kind: 'armor', hp: 30, off: v3(0.11, 0, 0), r: 0.08 },
+    ],
+  },
+  tick: {
+    id: 'tick', name: 'Клещ', cls: 'L', hp: 18, speed: 0.5, radius: 0.26, behavior: 'thief', reward: 6, scale: S,
+    blink: true, hop: { period: 1.6, dist: 1.4 }, latch: 5,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.1 },
+      { id: 'legs', kind: 'engine', hp: 10, off: v3(0, -0.06, 0), r: 0.1 },
+    ],
+  },
+  hunter: {
+    id: 'hunter', name: 'Охотник', cls: 'M', hp: 70, speed: 0.5, radius: 0.42, behavior: 'thief', reward: 14, scale: S, walk: 0.38,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.17 },
+      { id: 'head', kind: 'sensor', hp: 15, off: v3(0, 0.2, 0.04), r: 0.09 },
+      { id: 'arm', kind: 'grabber', hp: 25, off: v3(0.16, -0.02, 0.1), r: 0.08 },
+      { id: 'legL', kind: 'engine', hp: 25, off: v3(-0.09, -0.24, 0), r: 0.09 },
+      { id: 'legR', kind: 'engine', hp: 25, off: v3(0.09, -0.24, 0), r: 0.09 },
+    ],
+  },
+  node: {
+    id: 'node', name: 'Узел щита', cls: 'M', hp: 70, speed: 0, radius: 0.36, behavior: 'node', reward: 10, scale: S,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.18 },
+      { id: 'eye', kind: 'sensor', hp: 20, off: v3(0, 0, 0.14), r: 0.07 },
+    ],
+  },
+  nexus: {
+    id: 'nexus', name: 'Хор-Ядро', cls: 'B', hp: 700, speed: 0.3, radius: 1.0, behavior: 'core', reward: 400, scale: S * 1.5,
+    parts: [
+      { id: 'body', kind: 'core', hp: 9999, off: v3(0, 0, 0), r: 0.6 },
+    ],
+  },
 };
